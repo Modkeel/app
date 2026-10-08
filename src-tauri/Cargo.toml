@@ -1,0 +1,18 @@
+[package]
+name = "modkeel-app"
+version = "0.0.1"
+description = "Modkeel desktop app: a window over the Modkeel engine (modkeel serve --stdio)"
+edition = "2021"
+publish = false
+
+[lib]
+name = "modkeel_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

@@ -1,0 +1,169 @@
+/* Keel: the Companion's look (docs/companion-ui-style.md) on the desktop.
+   Java's frame (black outlines, light top-left and dark bottom-right edges) with Bedrock's
+   order (one card per item, the key fact as its title, pills beside it). Mid-gray, never
+   near-black; every zone has a pattern and neighbours never share one; cards are plain. */
+
+:root {
+  --screen: #6b6b6b;
+  --panel: #575757;
+  --strip: #3f3f3f;
+  --card: rgba(52, 52, 52, 0.92);
+  --pill: #252525;
+  --text: #ffffff;
+  --detail: #c6c6c6;
+  --act: #ffff55;
+  --primary: #4c6e3e;
+  --primary-lip: #2f4526;
+  --button: #8b8b8b;
+  --button-lip: #3a3a3a;
+  --ok: #55b14a;
+  --warn: #e0a030;
+  --bad: #d04a3c;
+  --edge-light: rgba(255, 255, 255, 0.18);
+  --edge-dark: rgba(0, 0, 0, 0.45);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-size: 14px;
+  color: var(--text);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  /* screen around the panel: faint 4 px checks */
+  background-color: var(--screen);
+  background-image:
+    linear-gradient(45deg, rgba(0,0,0,.06) 25%, transparent 25%, transparent 75%, rgba(0,0,0,.06) 75%),
+    linear-gradient(45deg, rgba(0,0,0,.06) 25%, transparent 25%, transparent 75%, rgba(0,0,0,.06) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 4px 4px;
+  background-attachment: fixed;
+}
+
+.strip {
+  /* header and footer: stripes leaning \ */
+  background-color: var(--strip);
+  background-image: repeating-linear-gradient(-45deg, rgba(255,255,255,.04) 0 5px, transparent 5px 10px);
+  background-attachment: fixed;
+  border-bottom: 1px solid #000;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+.strip h1 { font-size: 18px; margin: 0; letter-spacing: 0.5px; }
+
+main.panel {
+  /* panel: stripes leaning / */
+  max-width: 760px;
+  margin: 16px auto;
+  padding: 10px;
+  background-color: rgba(87, 87, 87, 0.85);
+  background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.05) 0 5px, transparent 5px 10px);
+  background-attachment: fixed;
+  border: 1px solid #000;
+  box-shadow: inset 1px 1px 0 var(--edge-light), inset -1px -1px 0 var(--edge-dark);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid #000;
+  box-shadow: inset 1px 1px 0 var(--edge-light), inset -1px -1px 0 var(--edge-dark);
+  padding: 10px 12px;
+  position: relative;
+}
+
+.card.ok { border-left: 3px solid var(--ok); }
+.card.warn { border-left: 3px solid var(--warn); }
+.card.bad { border-left: 3px solid var(--bad); }
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 16px;
+  font-weight: 700;
+  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.45);
+  margin-bottom: 6px;
+}
+
+.pill {
+  background: var(--pill);
+  border: 1px solid #000;
+  color: var(--detail);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 1px 6px;
+  text-shadow: none;
+}
+
+.detail { color: var(--detail); margin: 4px 0; line-height: 1.4; }
+.act { color: var(--act); }
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+
+.row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.row label { display: flex; flex-direction: column; gap: 3px; color: var(--detail); font-size: 12px; }
+.grow { flex: 1; min-width: 180px; }
+
+input, select {
+  background: #1e1e1e;
+  color: var(--text);
+  border: 1px solid #000;
+  box-shadow: inset 1px 1px 0 var(--edge-dark), inset -1px -1px 0 var(--edge-light);
+  padding: 6px 8px;
+  font: inherit;
+}
+input:focus, select:focus { outline: 1px solid #fff; }
+
+/* Our own arrow: WebKitGTK (the Linux webview) otherwise draws the GTK theme's select,
+   white on white with a dark theme. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 26px;
+  background-color: #1e1e1e;
+  background-image: linear-gradient(45deg, transparent 50%, var(--detail) 50%),
+    linear-gradient(135deg, var(--detail) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+option { background: #1e1e1e; color: var(--text); }
+
+button {
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
+  background: var(--button);
+  border: 1px solid #000;
+  /* Java's bevel plus Bedrock's thicker dark lip at the bottom */
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,.35), inset -1px -1px 0 rgba(0,0,0,.35),
+    inset 0 -3px 0 var(--button-lip);
+  padding: 6px 14px 8px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { outline: 1px solid #fff; }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary {
+  background: var(--primary);
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,.25), inset -1px -1px 0 rgba(0,0,0,.35),
+    inset 0 -3px 0 var(--primary-lip);
+}
+
+.steps { list-style: none; margin: 4px 0 0; padding: 0; }
+.steps li { display: flex; gap: 8px; color: var(--detail); padding: 2px 0; }
+.steps .mark { width: 14px; font-weight: 700; }
+.steps .mark.ok { color: var(--ok); }
+.steps .mark.no { color: var(--bad); }
+.steps .label { color: var(--text); min-width: 170px; }
+
+.activity { color: var(--detail); font-style: italic; }
+.activity::before { content: "› "; }
