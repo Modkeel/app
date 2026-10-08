@@ -17,6 +17,7 @@ import {
   shortDetail,
   strategyLabel,
 } from "./protocol";
+import logo from "./assets/logo.png";
 import Select from "./components/Select";
 import { Transport, defaultTransport } from "./transport";
 
@@ -84,6 +85,7 @@ export default function App({ transport: given }: { transport?: Transport }) {
   return (
     <>
       <header className="strip">
+        <img className="logo" src={logo} alt="" width={32} height={32} />
         <h1>Modkeel</h1>
         {state.engine && <span className="pill">engine {state.engine.version}</span>}
       </header>

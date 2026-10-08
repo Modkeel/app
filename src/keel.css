@@ -55,6 +55,8 @@ body {
 }
 
 .strip h1 { font-size: 18px; margin: 0; letter-spacing: 0.5px; }
+/* the Companion's pixel-art boat: scaled with hard edges, never smoothed */
+.strip .logo { image-rendering: pixelated; filter: drop-shadow(2px 2px 0 rgba(0, 0, 0, 0.45)); }
 
 main.panel {
   /* panel: stripes leaning / */
