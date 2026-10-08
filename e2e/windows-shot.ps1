@@ -18,7 +18,7 @@ function Shot([string]$name) {
 # Which icon the taskbar can get from the app: for each visible top-level window of the
 # process, its big/small icons (WM_GETICON) and its class icons, each saved as a PNG next to
 # the screenshots, plus the icon Explorer extracts from the exe. A zero handle is "not set".
-Add-Type -ReferencedAssemblies System.Drawing @"
+$IconTypes = @"
 using System; using System.Collections.Generic; using System.Runtime.InteropServices;
 using System.Text;
 public static class Win {
@@ -42,6 +42,7 @@ public static class Win {
 "@
 
 function IconReport([int]$procId, [string]$exePath) {
+  Add-Type -TypeDefinition $IconTypes
   $assoc = [System.Drawing.Icon]::ExtractAssociatedIcon($exePath)
   $assoc.ToBitmap().Save("e2e/shots/icon-exe.png", [System.Drawing.Imaging.ImageFormat]::Png)
   Write-Host "icon: exe associated $($assoc.Width)x$($assoc.Height) -> icon-exe.png"
