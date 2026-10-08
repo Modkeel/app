@@ -43,11 +43,50 @@ export interface GetResult {
   proposal: TargetOption | null;
 }
 
+export type ModStatus = "waiting" | "delivered" | "reused" | "missing" | "unknown";
+
+/** One JAR of a pack being moved (port): who it is and what became of it. */
+export interface PackRow {
+  file: string;
+  name: string;
+  slug: string | null;
+  identifiedBy: "hash" | "name" | null; // name: a guess the player may want to check
+  status: ModStatus;
+  detail: string;
+}
+
+export interface PortResult {
+  target: string;
+  loader: string;
+  output_dir: string;
+  retargeted: boolean;
+  ready: number;
+  mods: Array<{
+    file: string;
+    name: string;
+    identified_by: "hash" | "name" | null;
+    slug: string | null;
+    status: ModStatus;
+    delivered: Delivery | null;
+    detail: string;
+  }>;
+  proposal: TargetOption | null;
+}
+
+export interface PortParams {
+  mods_dir: string;
+  mc_version: string;
+  loader?: string;
+  output_dir?: string;
+}
+
+export type Method = "get" | "port";
+
 export type ServerMessage =
   | { type: "hello"; protocol: number; modkeel: string; methods: string[] }
   | { type: "event"; id: string; event: EngineEvent }
   | { type: "question"; id: string; qid: string; question: QuestionPayload }
-  | { type: "result"; id: string; result: GetResult }
+  | { type: "result"; id: string; result: GetResult | PortResult }
   | { type: "error"; id?: string; error: { code: string; message: string } };
 
 export interface GetParams {
@@ -111,6 +150,7 @@ export type Phase = "connecting" | "ready" | "running" | "asking" | "done" | "fa
 
 export interface State {
   phase: Phase;
+  method: Method;
   engine: { version: string; methods: string[] } | null;
   requestId: string | null;
   target: string | null; // the version being resolved right now
@@ -120,11 +160,14 @@ export interface State {
   files: string[]; // every JAR written, in order
   question: { qid: string; payload: QuestionPayload } | null;
   result: GetResult | null;
+  pack: PackRow[] | null; // port: one row per JAR, from pack_scanned on
+  portResult: PortResult | null;
   error: { code: string; message: string } | null;
 }
 
 export const initialState: State = {
   phase: "connecting",
+  method: "get",
   engine: null,
   requestId: null,
   target: null,
@@ -134,12 +177,14 @@ export const initialState: State = {
   files: [],
   question: null,
   result: null,
+  pack: null,
+  portResult: null,
   error: null,
 };
 
 /** A request starts: reset what the previous run showed, keep the engine handshake. */
-export function started(state: State, requestId: string, target: string): State {
-  return { ...initialState, phase: "running", engine: state.engine, requestId, target };
+export function started(state: State, requestId: string, target: string, method: Method = "get"): State {
+  return { ...initialState, phase: "running", engine: state.engine, requestId, target, method };
 }
 
 export function reduce(state: State, message: ServerMessage): State {
@@ -164,7 +209,19 @@ export function reduce(state: State, message: ServerMessage): State {
       return { ...state, phase: "asking", activity: null, question: { qid: message.qid, payload: message.question } };
     case "result":
       if (message.id !== state.requestId) return state;
-      return { ...state, phase: "done", activity: null, question: null, result: message.result };
+      if (state.method === "port") {
+        const r = message.result as PortResult;
+        const pack: PackRow[] = r.mods.map((m) => ({
+          file: m.file,
+          name: m.name,
+          slug: m.slug,
+          identifiedBy: m.identified_by,
+          status: m.status,
+          detail: m.detail,
+        }));
+        return { ...state, phase: "done", activity: null, question: null, portResult: r, pack, target: r.target };
+      }
+      return { ...state, phase: "done", activity: null, question: null, result: message.result as GetResult };
     case "error":
       // An error without an id is about a line the app sent badly; with another id it is
       // about an older request. Both still mean this run cannot go on if it was ours.
@@ -210,8 +267,27 @@ function onEvent(state: State, event: EngineEvent): State {
       return { ...state, activity: "Looking for the nearest Minecraft version where it runs" };
     case "saved":
       return { ...state, files: [...state.files, String(event.path)] };
-    case "mod_resolved":
-      return { ...state, activity: null };
+    case "pack_scanned":
+      return {
+        ...state,
+        pack: (event.mods as Array<[string, string, string | null, "hash" | "name" | null]>).map(
+          ([file, name, slug, identifiedBy]) => ({ file, name, slug, identifiedBy, status: "waiting", detail: "" }),
+        ),
+      };
+    case "mod_resolved": {
+      if (!state.pack) return { ...state, activity: null };
+      // the first row of that mod still waiting takes the outcome (names can repeat)
+      const i = state.pack.findIndex((r) => r.name === event.mod && r.status === "waiting");
+      if (i < 0) return { ...state, activity: null };
+      const trail = event.trail as Array<[string, boolean, string]>;
+      const delivered = event.delivered !== null && event.delivered !== undefined;
+      const row: PackRow = {
+        ...state.pack[i],
+        status: delivered ? "delivered" : "missing",
+        detail: delivered ? "" : (trail.at(-1)?.[2] ?? ""),
+      };
+      return { ...state, activity: null, pack: state.pack.map((r, j) => (j === i ? row : r)) };
+    }
     default:
       return state; // messages, progress...: not shown in this spike
   }
@@ -222,11 +298,14 @@ export function answered(state: State, value: unknown): State {
   const q = state.question;
   const target =
     q && q.payload.kind === "change_target" && value === true ? q.payload.option.mc_version : state.target;
-  return { ...state, phase: "running", question: null, target };
+  const again = state.pack && target !== state.target
+    ? state.pack.map((r) => ({ ...r, status: "waiting" as ModStatus, detail: "" }))
+    : state.pack;
+  return { ...state, phase: "running", question: null, target, pack: again };
 }
 
-export function request(id: string, params: GetParams) {
-  return { type: "request", id, method: "get", params };
+export function request(id: string, params: GetParams | PortParams, method: Method = "get") {
+  return { type: "request", id, method, params };
 }
 
 export function answer(qid: string, value: unknown) {

@@ -196,3 +196,18 @@ button.primary {
 
 .activity { color: var(--detail); font-style: italic; }
 .activity::before { content: "› "; }
+
+/* Tabs: the two jobs. Java-gray buttons; the open one reads as part of the panel. */
+.tabs { display: flex; gap: 4px; }
+.tab { font-weight: 600; }
+.tab.active {
+  background: var(--card);
+  box-shadow: inset 1px 1px 0 var(--edge-light), inset -1px -1px 0 var(--edge-dark);
+  outline: none;
+}
+
+/* A pack: one row per JAR. */
+.steps.pack li { align-items: baseline; }
+.steps .mark.wait { color: var(--detail); }
+.steps .mark.warn { color: var(--warn); }
+.pill.guess { margin-left: 6px; color: var(--act); }

@@ -14,6 +14,8 @@ export interface Transport {
   stop(): void;
   /** Where the player's files go (the app: Downloads/Modkeel); null: the engine's default. */
   outputDir(): Promise<string | null>;
+  /** The system's folder picker (the app); null when there is none (a browser): type it. */
+  pickFolder(): Promise<string | null>;
 }
 
 export class TauriTransport implements Transport {
@@ -36,6 +38,12 @@ export class TauriTransport implements Transport {
   async outputDir() {
     const { invoke } = await import("@tauri-apps/api/core");
     return invoke<string>("output_dir");
+  }
+
+  async pickFolder() {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const picked = await open({ directory: true, multiple: false, title: "The pack's mods folder" });
+    return typeof picked === "string" ? picked : null;
   }
 
   async send(message: object) {
@@ -65,6 +73,10 @@ export class BridgeTransport implements Transport {
   }
 
   async outputDir() {
+    return null;
+  }
+
+  async pickFolder() {
     return null;
   }
 

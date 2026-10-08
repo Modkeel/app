@@ -1,10 +1,17 @@
-// The spike's one screen: ask for a mod, show what the engine does, answer its questions,
-// show what was delivered. All state comes from protocol.reduce; this file only renders it
-// and turns clicks into protocol messages.
+// The app's screen: two jobs in tabs, one engine.
+//
+//   Get a mod     one mod for a Minecraft version (engine method `get`)
+//   Move a pack   a mods folder moved to another Minecraft version (method `port`)
+//
+// All state comes from protocol.reduce; this file only renders it and turns clicks into
+// protocol messages. Questions (token, version change) are the same cards for both jobs.
 
 import { useEffect, useReducer, useRef, useState } from "react";
 import {
   GetParams,
+  Method,
+  PackRow,
+  PortParams,
   QuestionPayload,
   ServerMessage,
   State,
@@ -23,7 +30,7 @@ import { Transport, defaultTransport } from "./transport";
 
 type Action =
   | { type: "server"; message: ServerMessage }
-  | { type: "started"; id: string; target: string }
+  | { type: "started"; id: string; target: string; method: Method }
   | { type: "answered"; value: unknown }
   | { type: "lost"; why: string };
 
@@ -32,7 +39,7 @@ function appReducer(state: State, action: Action): State {
     case "server":
       return reduce(state, action.message);
     case "started":
-      return started(state, action.id, action.target);
+      return started(state, action.id, action.target, action.method);
     case "answered":
       return answered(state, action.value);
     case "lost":
@@ -47,11 +54,16 @@ const LOADERS = [
   { value: "quilt", label: "Quilt" },
 ];
 
+// For a pack the loader is read from its JARs unless the player picks one.
+const PACK_LOADERS = [{ value: "", label: "From the mods" }, ...LOADERS];
+
 export default function App({ transport: given }: { transport?: Transport }) {
   // One transport (one engine) for the app's life: created once, never per render.
   const [transport] = useState<Transport>(() => given ?? defaultTransport());
   const [state, dispatch] = useReducer(appReducer, initialState);
-  const [form, setForm] = useState<GetParams>({ query: "", mc_version: "", loader: "fabric" });
+  const [tab, setTab] = useState<Method>("get");
+  const [getForm, setGetForm] = useState<GetParams>({ query: "", mc_version: "", loader: "fabric" });
+  const [portForm, setPortForm] = useState<PortParams>({ mods_dir: "", mc_version: "", loader: "" });
   const nextId = useRef(1);
   const [outputDir, setOutputDir] = useState<string | null>(null);
 
@@ -67,13 +79,12 @@ export default function App({ transport: given }: { transport?: Transport }) {
   }, [transport]);
 
   const busy = state.phase === "running" || state.phase === "asking";
-  const canStart = !busy && state.engine !== null && form.query.trim() && form.mc_version.trim();
+  const ready = !busy && state.engine !== null;
 
-  function start() {
+  function start(method: Method, target: string, params: GetParams | PortParams) {
     const id = String(nextId.current++);
-    dispatch({ type: "started", id, target: form.mc_version.trim() });
-    const params = { ...form, query: form.query.trim(), mc_version: form.mc_version.trim() };
-    transport.send(request(id, outputDir ? { ...params, output_dir: outputDir } : params));
+    dispatch({ type: "started", id, target, method });
+    transport.send(request(id, outputDir ? { ...params, output_dir: outputDir } : params, method));
   }
 
   function reply(value: unknown) {
@@ -81,6 +92,9 @@ export default function App({ transport: given }: { transport?: Transport }) {
     transport.send(answer(state.question.qid, value));
     dispatch({ type: "answered", value });
   }
+
+  // the run on screen belongs to the tab that started it
+  const showing = state.requestId !== null && state.method === tab;
 
   return (
     <>
@@ -90,55 +104,38 @@ export default function App({ transport: given }: { transport?: Transport }) {
         {state.engine && <span className="pill">engine {state.engine.version}</span>}
       </header>
       <main className="panel">
-        <section className="card">
-          <div className="title">Get a mod</div>
-          <form
-            className="row"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (canStart) start();
-            }}
-          >
-            <label className="grow">
-              Mod
-              <input
-                name="query"
-                placeholder="Sodium, JEI, Create..."
-                value={form.query}
-                onChange={(e) => setForm({ ...form, query: e.target.value })}
-              />
-            </label>
-            <label>
-              Minecraft
-              <input
-                name="mc_version"
-                placeholder="1.21.10"
-                size={8}
-                value={form.mc_version}
-                onChange={(e) => setForm({ ...form, mc_version: e.target.value })}
-              />
-            </label>
-            {/* not a <label>: a label forwards clicks inside it to the button, which
-                would reopen the list right after an option is picked */}
-            <div className="field">
-              Loader
-              <Select
-                name="loader"
-                value={form.loader}
-                options={LOADERS}
-                onChange={(loader) => setForm({ ...form, loader })}
-              />
-            </div>
-            <button className="primary" type="submit" disabled={!canStart}>
-              {busy ? "Working..." : "Get it"}
+        <nav className="tabs" role="tablist">
+          {(["get", "port"] as Method[]).map((m) => (
+            <button
+              key={m}
+              role="tab"
+              aria-selected={tab === m}
+              className={tab === m ? "tab active" : "tab"}
+              onClick={() => setTab(m)}
+            >
+              {m === "get" ? "Get a mod" : "Move a pack"}
             </button>
-          </form>
-          {state.phase === "connecting" && <p className="detail">Starting the engine...</p>}
-        </section>
+          ))}
+        </nav>
 
-        {state.requestId && <Progress state={state} />}
-        {state.question && <Question payload={state.question.payload} onAnswer={reply} />}
-        {state.result && <Result state={state} />}
+        {tab === "get" ? (
+          <GetForm form={getForm} setForm={setGetForm} ready={ready} busy={busy} onStart={start} />
+        ) : (
+          <PortForm
+            form={portForm}
+            setForm={setPortForm}
+            ready={ready}
+            busy={busy}
+            onStart={start}
+            pickFolder={() => transport.pickFolder()}
+          />
+        )}
+        {state.phase === "connecting" && <p className="detail">Starting the engine...</p>}
+
+        {showing && state.method === "get" && <Progress state={state} />}
+        {showing && state.method === "port" && state.pack && <PackList state={state} />}
+        {showing && state.question && <Question payload={state.question.payload} onAnswer={reply} />}
+        {showing && state.result && <Result state={state} />}
         {state.error && (
           <section className="card bad">
             <div className="title">
@@ -149,6 +146,134 @@ export default function App({ transport: given }: { transport?: Transport }) {
         )}
       </main>
     </>
+  );
+}
+
+type StartFn = (method: Method, target: string, params: GetParams | PortParams) => void;
+
+function GetForm(props: {
+  form: GetParams;
+  setForm: (f: GetParams) => void;
+  ready: boolean;
+  busy: boolean;
+  onStart: StartFn;
+}) {
+  const { form, setForm, ready, busy, onStart } = props;
+  const can = ready && form.query.trim() !== "" && form.mc_version.trim() !== "";
+  return (
+    <section className="card">
+      <div className="title">Get a mod</div>
+      <form
+        className="row"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (can)
+            onStart("get", form.mc_version.trim(), {
+              ...form,
+              query: form.query.trim(),
+              mc_version: form.mc_version.trim(),
+            });
+        }}
+      >
+        <label className="grow">
+          Mod
+          <input
+            name="query"
+            placeholder="Sodium, JEI, Create..."
+            value={form.query}
+            onChange={(e) => setForm({ ...form, query: e.target.value })}
+          />
+        </label>
+        <label>
+          Minecraft
+          <input
+            name="mc_version"
+            placeholder="1.21.10"
+            size={8}
+            value={form.mc_version}
+            onChange={(e) => setForm({ ...form, mc_version: e.target.value })}
+          />
+        </label>
+        {/* not a <label>: a label forwards clicks inside it to the button, which
+            would reopen the list right after an option is picked */}
+        <div className="field">
+          Loader
+          <Select name="loader" value={form.loader} options={LOADERS} onChange={(loader) => setForm({ ...form, loader })} />
+        </div>
+        <button className="primary" type="submit" disabled={!can}>
+          {busy ? "Working..." : "Get it"}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+function PortForm(props: {
+  form: PortParams;
+  setForm: (f: PortParams) => void;
+  ready: boolean;
+  busy: boolean;
+  onStart: StartFn;
+  pickFolder: () => Promise<string | null>;
+}) {
+  const { form, setForm, ready, busy, onStart, pickFolder } = props;
+  const can = ready && form.mods_dir.trim() !== "" && form.mc_version.trim() !== "";
+  return (
+    <section className="card">
+      <div className="title">Move a pack</div>
+      <p className="detail">Your mods folder is only read; the new pack goes to its own folder.</p>
+      <form
+        className="row"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!can) return;
+          const params: PortParams = { mods_dir: form.mods_dir.trim(), mc_version: form.mc_version.trim() };
+          if (form.loader) params.loader = form.loader;
+          onStart("port", params.mc_version, params);
+        }}
+      >
+        <label className="grow">
+          Mods folder
+          <input
+            name="mods_dir"
+            placeholder=".minecraft/mods or an instance's mods folder"
+            value={form.mods_dir}
+            onChange={(e) => setForm({ ...form, mods_dir: e.target.value })}
+          />
+        </label>
+        <button
+          type="button"
+          onClick={async () => {
+            const dir = await pickFolder();
+            if (dir) setForm({ ...form, mods_dir: dir });
+          }}
+        >
+          Choose...
+        </button>
+        <label>
+          To Minecraft
+          <input
+            name="port_mc_version"
+            placeholder="1.21.10"
+            size={8}
+            value={form.mc_version}
+            onChange={(e) => setForm({ ...form, mc_version: e.target.value })}
+          />
+        </label>
+        <div className="field">
+          Loader
+          <Select
+            name="port_loader"
+            value={form.loader ?? ""}
+            options={PACK_LOADERS}
+            onChange={(loader) => setForm({ ...form, loader })}
+          />
+        </div>
+        <button className="primary" type="submit" disabled={!can}>
+          {busy ? "Working..." : "Move it"}
+        </button>
+      </form>
+    </section>
   );
 }
 
@@ -174,10 +299,59 @@ function Progress({ state }: { state: State }) {
   );
 }
 
+const MARK: Record<PackRow["status"], [string, string]> = {
+  waiting: ["…", "wait"],
+  delivered: ["✓", "ok"],
+  reused: ["↻", "ok"],
+  missing: ["✗", "no"],
+  unknown: ["?", "warn"],
+};
+
+function PackList({ state }: { state: State }) {
+  const rows = state.pack!;
+  const done = rows.filter((r) => r.status === "delivered" || r.status === "reused").length;
+  const r = state.portResult;
+  const edge = r ? (r.ready === rows.length ? "ok" : r.ready > 0 ? "warn" : "bad") : "";
+  return (
+    <section className={`card ${edge}`} data-testid={r ? "result" : "progress"}>
+      <div className="title">
+        {done} of {rows.length} ready
+        {state.target && <span className="pill">MC {state.target}</span>}
+        {r && <span className="pill">{r.loader}</span>}
+      </div>
+      {state.activity && <p className="activity">{state.activity}</p>}
+      {r?.retargeted && <p className="detail">Moved to MC {r.target}: more of the pack runs there.</p>}
+      <ul className="steps pack">
+        {rows.map((row) => {
+          const [mark, tone] = MARK[row.status];
+          return (
+            <li key={row.file} title={row.file}>
+              <span className={`mark ${tone}`}>{mark}</span>
+              <span className="label">
+                {row.name}
+                {row.identifiedBy === "name" && <span className="pill guess">by name</span>}
+              </span>
+              <span title={row.detail}>
+                {row.status === "reused" ? "your JAR runs there" : shortDetail(row.detail)}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      {r && (
+        <p className="detail">
+          In <span className="mono">{r.output_dir}</span>
+        </p>
+      )}
+    </section>
+  );
+}
+
 function Question({ payload, onAnswer }: { payload: QuestionPayload; onAnswer: (v: unknown) => void }) {
   const [token, setToken] = useState("");
   if (payload.kind === "change_target") {
     const there = payload.option.mc_version;
+    const pack = payload.scope === "pack";
     return (
       <section className="card warn" data-testid="question">
         <div className="title">
@@ -187,7 +361,7 @@ function Question({ payload, onAnswer }: { payload: QuestionPayload; onAnswer: (
         <p className="detail">Files go to their own folder, never into your game.</p>
         <div className="row">
           <button className="primary" onClick={() => onAnswer(true)}>
-            Get it for MC {there}
+            {pack ? `Move the pack to MC ${there}` : `Get it for MC ${there}`}
           </button>
           <button onClick={() => onAnswer(false)}>Stay on MC {payload.current}</button>
         </div>
