@@ -1,6 +1,7 @@
 # Install the NSIS build silently, open the app as a player would, type a get with the
-# keyboard (Mod field first in tab order; Enter in the Minecraft field submits), and take
-# screenshots: e2e/shots/windows-1-open.png, windows-2-get.png. For CI (app-release.yml).
+# keyboard (the two tabs, then the Mod field in tab order; Enter in the Minecraft field
+# submits), and take screenshots: e2e/shots/windows-1-open.png, windows-2-get.png. Fails when
+# the get left no JAR (the typing missed the form, or the get failed). For CI (app-release.yml).
 param([string]$Installer)
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
@@ -89,13 +90,15 @@ try { IconReport $app.Id $exe.FullName } catch { Write-Host "icon: report failed
 $shell = New-Object -ComObject WScript.Shell
 $null = $shell.AppActivate($app.Id)
 Start-Sleep -Seconds 1
-[System.Windows.Forms.SendKeys]::SendWait("{TAB}")
+[System.Windows.Forms.SendKeys]::SendWait("{TAB 3}")   # Get a mod, Move a pack, Mod
 Start-Sleep -Milliseconds 300
 [System.Windows.Forms.SendKeys]::SendWait("Sodium{TAB}1.21.10{ENTER}")
 Start-Sleep -Seconds 45
 Shot "windows-2-get.png"
 
 $downloads = Join-Path $env:USERPROFILE "Downloads\Modkeel"
-Get-ChildItem $downloads -Recurse -Filter *.jar -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "jar: $($_.FullName)" }
+$jars = @(Get-ChildItem $downloads -Recurse -Filter *.jar -ErrorAction SilentlyContinue)
+$jars | ForEach-Object { Write-Host "jar: $($_.FullName)" }
 Write-Host "engine processes: $((Get-Process modkeel-engine -ErrorAction SilentlyContinue).Count)"
 Stop-Process -Id $app.Id -ErrorAction SilentlyContinue
+if ($jars.Count -eq 0) { throw "the get left no JAR in $downloads (see windows-2-get.png)" }

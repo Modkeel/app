@@ -13,7 +13,10 @@ xattr -cr "$app"                       # unsigned build: drop the quarantine fla
 open "$app"
 sleep 20
 screencapture -x e2e/shots/macos-1-open.png && echo "shot: macos-1-open.png"
+# three tabs: the "Get a mod" and "Move a pack" tabs, then the Mod field
 osascript -e 'tell application "System Events" to keystroke tab' \
+          -e 'tell application "System Events" to keystroke tab' \
+          -e 'tell application "System Events" to keystroke tab' \
           -e 'tell application "System Events" to keystroke "Sodium"' \
           -e 'tell application "System Events" to keystroke tab' \
           -e 'tell application "System Events" to keystroke "1.21.10"' \
