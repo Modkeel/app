@@ -16,9 +16,19 @@ scripts/dev-bridge.mjs   WebSocket <-> `modkeel serve --stdio`, for the browser 
 e2e/get.mjs         Chromium + dev bridge + the real engine: a full get, with screenshots
 ```
 
-Which engine runs: `MODKEEL_ENGINE` (e.g. `python3 -m modkeel.cli serve --stdio`), else a
-`modkeel-engine` bundled next to the executable (packaging step, not built yet), else
-`modkeel serve --stdio` from PATH (`pipx install modkeel`).
+Which engine runs: `MODKEEL_ENGINE` (e.g. `python3 -m modkeel.cli serve --stdio`), else the
+`modkeel-engine` bundled next to the executable (the installers carry it), else
+`modkeel serve --stdio` from PATH (`pipx install modkeel`). The engine runs in, and writes
+to, `Downloads/Modkeel` (home/Modkeel without a Downloads folder), never beside the app.
+
+## Installers
+
+`python app/scripts/build_engine.py --get` builds the engine for this OS with PyInstaller
+(`src-tauri/binaries/modkeel-engine-<target triple>`, not committed) and checks it with a
+real get; `npx tauri build` then bundles it. CI does both on Windows (NSIS .exe), macOS
+(Apple Silicon .dmg) and Linux (.deb, .AppImage): `.github/workflows/app-release.yml`, on
+work branches that touch `app/` and by hand; the installers are the run's artifacts.
+Unsigned: Windows SmartScreen and macOS Gatekeeper warn the first time.
 
 ```bash
 npm install
@@ -29,7 +39,8 @@ npm run e2e                    # real get through the screen (network; Chromium)
 
 # the app itself (Linux needs libwebkit2gtk-4.1-dev; Windows/macOS ship their webview)
 MODKEEL_ENGINE="python3 -m modkeel.cli serve --stdio" PYTHONPATH=.. npx tauri dev
-npx tauri build --no-bundle    # release binary in src-tauri/target/release/
+python scripts/build_engine.py # the bundled engine (needed by tauri build)
+npx tauri build --bundles deb  # installer in src-tauri/target/release/bundle/
 ```
 
 To work on the screen in a browser: `npm run bridge` in one terminal, `npm run dev` in

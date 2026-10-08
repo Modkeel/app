@@ -44,6 +44,7 @@ describe("a recorded get", () => {
   it("asks for a token, then for the version change, and stops while it waits", () => {
     const first = replay((s) => s.phase === "asking");
     expect(first.question?.payload.kind).toBe("need_token");
+    expect(first.activity).toBeNull();
     expect(first.mod).toMatchObject({ title: "Accessories", slug: "accessories", identified: true });
     expect(first.steps.map((s) => s.strategy)).toEqual([
       "official",

@@ -3,6 +3,8 @@
 //!   engine_start   start the engine (once); a second call replays its hello, so a window
 //!                  that reloads (or React's dev double-mount) reconnects instead of hanging
 //!   engine_send    one protocol line to the engine
+//!   output_dir     where the player's files go (Downloads/Modkeel), created if missing; the
+//!                  engine also runs there, so nothing is written next to the app itself
 //!   "engine-line"  event: one line from the engine
 //!   "engine-exit"  event: the engine stopped (with why)
 //!
@@ -22,6 +24,24 @@ struct EngineState {
     hello: Arc<Mutex<Option<String>>>,
 }
 
+/// Downloads/Modkeel (home/Modkeel when the system has no Downloads folder).
+fn player_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let base = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().home_dir())
+        .map_err(|e| format!("no Downloads or home folder: {e}"))?;
+    let dir = base.join("Modkeel");
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("could not create {}: {e}", dir.display()))?;
+    Ok(dir)
+}
+
+#[tauri::command]
+fn output_dir(app: AppHandle) -> Result<String, String> {
+    player_dir(&app).map(|d| d.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 fn engine_start(app: AppHandle, state: State<'_, EngineState>) -> Result<(), String> {
     let mut slot = state.engine.lock().map_err(|e| e.to_string())?;
@@ -31,11 +51,15 @@ fn engine_start(app: AppHandle, state: State<'_, EngineState>) -> Result<(), Str
         }
         return Ok(());
     }
-    let exe_dir = std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
     let command = engine_command(std::env::var("MODKEEL_ENGINE").ok(), exe_dir.as_deref());
     let (line_app, exit_app, hello) = (app.clone(), app.clone(), state.hello.clone());
+    let work_dir = player_dir(&app)?;
     let engine = Engine::spawn(
         &command,
+        &work_dir,
         move |line| {
             if line.contains("\"type\":\"hello\"") {
                 if let Ok(mut h) = hello.lock() {
@@ -68,7 +92,11 @@ fn engine_send(line: String, state: State<'_, EngineState>) -> Result<(), String
 pub fn run() {
     let app = tauri::Builder::default()
         .manage(EngineState::default())
-        .invoke_handler(tauri::generate_handler![engine_start, engine_send])
+        .invoke_handler(tauri::generate_handler![
+            engine_start,
+            engine_send,
+            output_dir
+        ])
         .build(tauri::generate_context!())
         .expect("error while building the Modkeel app");
     app.run(|handle, event| {

@@ -160,7 +160,8 @@ export function reduce(state: State, message: ServerMessage): State {
       return message.id === state.requestId ? onEvent(state, message.event) : state;
     case "question":
       if (message.id !== state.requestId) return state;
-      return { ...state, phase: "asking", question: { qid: message.qid, payload: message.question } };
+      // while it waits for the player nothing is in progress: drop the last activity line
+      return { ...state, phase: "asking", activity: null, question: { qid: message.qid, payload: message.question } };
     case "result":
       if (message.id !== state.requestId) return state;
       return { ...state, phase: "done", activity: null, question: null, result: message.result };

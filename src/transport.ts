@@ -12,6 +12,8 @@ export interface Transport {
   send(message: object): Promise<void>;
   /** Stop listening (and, for the bridge, close the connection: its engine exits). */
   stop(): void;
+  /** Where the player's files go (the app: Downloads/Modkeel); null: the engine's default. */
+  outputDir(): Promise<string | null>;
 }
 
 export class TauriTransport implements Transport {
@@ -29,6 +31,11 @@ export class TauriTransport implements Transport {
   stop() {
     this.unlisten.forEach((u) => u());
     this.unlisten = [];
+  }
+
+  async outputDir() {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return invoke<string>("output_dir");
   }
 
   async send(message: object) {
@@ -55,6 +62,10 @@ export class BridgeTransport implements Transport {
 
   async send(message: object) {
     this.socket?.send(JSON.stringify(message));
+  }
+
+  async outputDir() {
+    return null;
   }
 
   stop() {

@@ -52,6 +52,7 @@ export default function App({ transport: given }: { transport?: Transport }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [form, setForm] = useState<GetParams>({ query: "", mc_version: "", loader: "fabric" });
   const nextId = useRef(1);
+  const [outputDir, setOutputDir] = useState<string | null>(null);
 
   useEffect(() => {
     transport
@@ -60,6 +61,7 @@ export default function App({ transport: given }: { transport?: Transport }) {
         (why) => dispatch({ type: "lost", why }),
       )
       .catch((e: Error) => dispatch({ type: "lost", why: e.message }));
+    transport.outputDir().then(setOutputDir, () => setOutputDir(null));
     return () => transport.stop();
   }, [transport]);
 
@@ -69,7 +71,8 @@ export default function App({ transport: given }: { transport?: Transport }) {
   function start() {
     const id = String(nextId.current++);
     dispatch({ type: "started", id, target: form.mc_version.trim() });
-    transport.send(request(id, { ...form, query: form.query.trim(), mc_version: form.mc_version.trim() }));
+    const params = { ...form, query: form.query.trim(), mc_version: form.mc_version.trim() };
+    transport.send(request(id, outputDir ? { ...params, output_dir: outputDir } : params));
   }
 
   function reply(value: unknown) {
@@ -212,6 +215,10 @@ function Question({ payload, onAnswer }: { payload: QuestionPayload; onAnswer: (
   );
 }
 
+function fileName(path: string): string {
+  return path.split(/[\\/]/).pop() ?? path;
+}
+
 function Result({ state }: { state: State }) {
   const r = state.result!;
   if (!r.delivered) {
@@ -236,9 +243,14 @@ function Result({ state }: { state: State }) {
       {d.caveat && <p className="detail act">{d.caveat}</p>}
       <ul className="steps mono">
         {state.files.map((f) => (
-          <li key={f}>{f}</li>
+          <li key={f} title={f}>
+            {fileName(f)}
+          </li>
         ))}
       </ul>
+      <p className="detail">
+        In <span className="mono">{r.output_dir}</span>
+      </p>
     </section>
   );
 }

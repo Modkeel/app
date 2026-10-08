@@ -52,7 +52,7 @@ try {
   await page.screenshot({ path: shots + "4-done.png", fullPage: true });
   await browser.close();
 
-  for (const want of ["Accessories", "MC 1.21.10", "downloaded", "out/mc-1.21.10/"]) {
+  for (const want of ["Accessories", "MC 1.21.10", "downloaded", "fabric-api-", "out/mc-1.21.10"]) {
     if (!text.includes(want)) throw new Error(`result card lacks "${want}":\n${text}`);
   }
   console.log("e2e ok: " + text.replace(/\n+/g, " | "));
