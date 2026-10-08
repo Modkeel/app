@@ -123,10 +123,13 @@ fn set_taskbar_icon(window: &tauri::WebviewWindow) {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init()) // the pack's mods folder picker
-        .setup(|_app| {
-            #[cfg(windows)]
-            for window in _app.webview_windows().values() {
+        // The window starts hidden (tauri.conf.json) and is shown here, once its icons are
+        // set: the taskbar takes a button's icon when the window first appears.
+        .setup(|app| {
+            for window in app.webview_windows().values() {
+                #[cfg(windows)]
                 set_taskbar_icon(window);
+                window.show()?;
             }
             Ok(())
         })
