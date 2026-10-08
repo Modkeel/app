@@ -31,7 +31,9 @@ try {
 
   await page.fill("input[name=query]", "Accessories");
   await page.fill("input[name=mc_version]", "1.21.11");
-  await page.selectOption("select[name=loader]", "fabric");
+  await page.click("button[name=loader]");
+  await page.screenshot({ path: shots + "1b-loader-open.png" });
+  await page.getByRole("option", { name: "Fabric" }).click();
   await page.click("button[type=submit]");
 
   // first question: a token for forks; skip it

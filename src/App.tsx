@@ -17,6 +17,7 @@ import {
   shortDetail,
   strategyLabel,
 } from "./protocol";
+import Select from "./components/Select";
 import { Transport, defaultTransport } from "./transport";
 
 type Action =
@@ -38,7 +39,12 @@ function appReducer(state: State, action: Action): State {
   }
 }
 
-const LOADERS = ["fabric", "neoforge", "forge", "quilt"];
+const LOADERS = [
+  { value: "fabric", label: "Fabric" },
+  { value: "neoforge", label: "NeoForge" },
+  { value: "forge", label: "Forge" },
+  { value: "quilt", label: "Quilt" },
+];
 
 export default function App({ transport: given }: { transport?: Transport }) {
   // One transport (one engine) for the app's life: created once, never per render.
@@ -107,20 +113,17 @@ export default function App({ transport: given }: { transport?: Transport }) {
                 onChange={(e) => setForm({ ...form, mc_version: e.target.value })}
               />
             </label>
-            <label>
+            {/* not a <label>: a label forwards clicks inside it to the button, which
+                would reopen the list right after an option is picked */}
+            <div className="field">
               Loader
-              <select
+              <Select
                 name="loader"
                 value={form.loader}
-                onChange={(e) => setForm({ ...form, loader: e.target.value })}
-              >
-                {LOADERS.map((l) => (
-                  <option key={l} value={l}>
-                    {l === "neoforge" ? "NeoForge" : l[0].toUpperCase() + l.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </label>
+                options={LOADERS}
+                onChange={(loader) => setForm({ ...form, loader })}
+              />
+            </div>
             <button className="primary" type="submit" disabled={!canStart}>
               {busy ? "Working..." : "Get it"}
             </button>

@@ -109,10 +109,10 @@ main.panel {
 .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }
 
 .row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
-.row label { display: flex; flex-direction: column; gap: 3px; color: var(--detail); font-size: 12px; }
+.row label, .row .field { display: flex; flex-direction: column; gap: 3px; color: var(--detail); font-size: 12px; }
 .grow { flex: 1; min-width: 180px; }
 
-input, select {
+input {
   background: #1e1e1e;
   color: var(--text);
   border: 1px solid #000;
@@ -120,22 +120,49 @@ input, select {
   padding: 6px 8px;
   font: inherit;
 }
-input:focus, select:focus { outline: 1px solid #fff; }
+input:focus, .select-button:focus-visible { outline: 1px solid #fff; }
 
-/* Our own arrow: WebKitGTK (the Linux webview) otherwise draws the GTK theme's select,
-   white on white with a dark theme. */
-select {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 26px;
+/* Dropdown (components/Select.tsx): ours, not <select>, whose open list the platform draws
+   (GTK on Linux: white with a blue highlight). Closed it looks like an input with an arrow;
+   open, a card with the picked option's green edge and a light outline on the active one. */
+.select { position: relative; }
+.select-button {
+  min-width: 110px;
+  text-align: left;
+  font-weight: 400;
+  text-shadow: none;
   background-color: #1e1e1e;
   background-image: linear-gradient(45deg, transparent 50%, var(--detail) 50%),
     linear-gradient(135deg, var(--detail) 50%, transparent 50%);
   background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
+  box-shadow: inset 1px 1px 0 var(--edge-dark), inset -1px -1px 0 var(--edge-light);
+  padding: 6px 28px 6px 8px;
 }
-option { background: #1e1e1e; color: var(--text); }
+.select-button[aria-expanded="true"] { outline: 1px solid #fff; }
+.select-list {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 100%;
+  margin: 0;
+  padding: 2px;
+  list-style: none;
+  background: #2b2b2b;
+  border: 1px solid #000;
+  box-shadow: inset 1px 1px 0 var(--edge-light), inset -1px -1px 0 var(--edge-dark),
+    0 4px 10px rgba(0, 0, 0, 0.4);
+}
+.select-list li {
+  padding: 5px 8px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  color: var(--detail);
+}
+.select-list li[aria-selected="true"] { border-left-color: var(--ok); color: var(--text); }
+.select-list li.active { background: #3d3d3d; outline: 1px solid rgba(255, 255, 255, 0.6); color: var(--text); }
 
 button {
   font: inherit;
