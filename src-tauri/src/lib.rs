@@ -89,9 +89,47 @@ fn engine_send(line: String, state: State<'_, EngineState>) -> Result<(), String
     engine.send(&line).map_err(|e| e.to_string())
 }
 
+/// Windows: the taskbar draws a window's big icon (WM_SETICON ICON_BIG). Tauri sets only the
+/// small one (the title bar) and leaves the big one empty, so the taskbar fell back to the
+/// generic app icon. The icon is the one tauri-build embeds in the exe (from icons/icon.ico),
+/// loaded at the system's large icon size so Windows picks that entry instead of scaling one.
+#[cfg(windows)]
+fn set_taskbar_icon(window: &tauri::WebviewWindow) {
+    use tauri::utils::platform::WINDOWS_APP_ICON_RESOURCE_ID;
+    use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, LoadImageW, SendMessageW, ICON_BIG, IMAGE_ICON, LR_DEFAULTCOLOR,
+        SM_CXICON, SM_CYICON, WM_SETICON,
+    };
+
+    let Ok(hwnd) = window.hwnd() else { return };
+    // SAFETY: plain Win32 calls on this process's module and a live window handle; the
+    // icon handle is owned by the window from here on (kept for the app's lifetime).
+    unsafe {
+        let icon = LoadImageW(
+            GetModuleHandleW(std::ptr::null()),
+            WINDOWS_APP_ICON_RESOURCE_ID as usize as *const u16, // MAKEINTRESOURCE
+            IMAGE_ICON,
+            GetSystemMetrics(SM_CXICON),
+            GetSystemMetrics(SM_CYICON),
+            LR_DEFAULTCOLOR,
+        );
+        if !icon.is_null() {
+            SendMessageW(hwnd.0 as _, WM_SETICON, ICON_BIG as usize, icon as isize);
+        }
+    }
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init()) // the pack's mods folder picker
+        .setup(|_app| {
+            #[cfg(windows)]
+            for window in _app.webview_windows().values() {
+                set_taskbar_icon(window);
+            }
+            Ok(())
+        })
         .manage(EngineState::default())
         .invoke_handler(tauri::generate_handler![
             engine_start,
