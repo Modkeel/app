@@ -30,8 +30,9 @@ to, `Downloads/Modkeel` (home/Modkeel without a Downloads folder), never beside 
 `python app/scripts/build_engine.py --get` builds the engine for this OS with PyInstaller
 (`src-tauri/binaries/modkeel-engine-<target triple>`, not committed) and checks it with a
 real get; `npx tauri build` then bundles it. CI does both on Windows (NSIS .exe), macOS
-(Apple Silicon .dmg) and Linux (.deb, .AppImage): `.github/workflows/app-release.yml`, on
-work branches that touch `app/` and by hand; the installers are the run's artifacts.
+(Apple Silicon .dmg) and Linux (.deb, .AppImage): `.github/workflows/app-release.yml`, run by
+hand only (macOS and Windows minutes are the expensive ones); the installers are the run's
+artifacts. To try a branch's installers: Actions -> app-release -> Run workflow on that branch.
 Unsigned: Windows SmartScreen and macOS Gatekeeper warn the first time.
 
 ## Public releases and updates
