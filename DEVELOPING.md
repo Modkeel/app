@@ -34,6 +34,27 @@ real get; `npx tauri build` then bundles it. CI does both on Windows (NSIS .exe)
 work branches that touch `app/` and by hand; the installers are the run's artifacts.
 Unsigned: Windows SmartScreen and macOS Gatekeeper warn the first time.
 
+## Public releases and updates
+
+Players download from the public repo [Modkeel/app](https://github.com/Modkeel/app): only
+releases and a README (`release/README.md` here, synced on each release); the code stays in
+the lab. The installed app checks `releases/latest/download/latest.json` there at start
+(`src/updater.ts`, Tauri's updater plugin) and offers "Update and restart".
+
+Updates are signed with the app's updater key (Tauri's minisign key, unrelated to OS code
+signing). Its public half is `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`; a build
+without it has no updater plugin at all (`lib.rs` `has_updater`). The private half is only the
+lab secret `TAURI_SIGNING_PRIVATE_KEY` (+ `_PASSWORD`) and the maintainer's backup: if it is
+lost, installed apps can never update again and players must reinstall by hand.
+
+Releasing:
+1. A PR bumping the version in `package.json`, `src-tauri/tauri.conf.json` and
+   `src-tauri/Cargo.toml` (+ `npm install`, `cargo update -p modkeel-app` for the lockfiles),
+   with `release-notes/<version>.md` (shown on the release page and in the update card).
+2. Merge, then Actions -> app-release -> Run workflow on main with **publish** ticked: it
+   builds, signs the update bundles, writes `latest.json` and `SHA256SUMS`
+   (`scripts/release_manifest.py`) and publishes `v<version>` to Modkeel/app.
+
 ```bash
 npm install
 npm test                       # reducer against a recorded engine session

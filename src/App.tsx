@@ -34,6 +34,7 @@ import {
 import logo from "./assets/logo.png";
 import Select from "./components/Select";
 import { Transport, defaultTransport } from "./transport";
+import { AvailableUpdate, checkUpdate } from "./updater";
 
 type Action =
   | { type: "server"; message: ServerMessage }
@@ -79,6 +80,12 @@ export default function App({ transport: given }: { transport?: Transport }) {
   const [outputDir, setOutputDir] = useState<string | null>(null);
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
   const [signedIn, setSignedIn] = useState<boolean | null>(null); // null: not known yet
+  const [update, setUpdate] = useState<AvailableUpdate | null>(null);
+
+  // a newer release of the app, asked once at start (null in builds without the updater)
+  useEffect(() => {
+    checkUpdate().then(setUpdate, () => setUpdate(null));
+  }, []);
 
   useEffect(() => {
     transport
@@ -149,6 +156,7 @@ export default function App({ transport: given }: { transport?: Transport }) {
         )}
       </header>
       <main className="panel">
+        {update && <UpdateCard update={update} busy={busy} />}
         <nav className="tabs" role="tablist">
           {(["get", "move"] as const).map((m) => (
             <button
@@ -194,6 +202,34 @@ export default function App({ transport: given }: { transport?: Transport }) {
         )}
       </main>
     </>
+  );
+}
+
+/** A newer app release: install it and restart, never while a run is going (it would stop). */
+function UpdateCard({ update, busy }: { update: AvailableUpdate; busy: boolean }) {
+  const [progress, setProgress] = useState<number | null | undefined>(undefined); // undefined: not started
+  const [failed, setFailed] = useState<string | null>(null);
+  const installing = progress !== undefined && failed === null;
+
+  function install() {
+    setFailed(null);
+    setProgress(null);
+    update.install(setProgress).catch((e: Error) => setFailed(e.message ?? String(e)));
+  }
+
+  return (
+    <section className="card ok">
+      <div className="title">
+        Modkeel {update.version} is out <span className="pill">update</span>
+      </div>
+      {update.notes && <p className="detail">{update.notes}</p>}
+      {failed && <p className="detail">Update failed: {failed}</p>}
+      <button disabled={busy || installing} onClick={install}>
+        {installing
+          ? progress === null ? "Downloading..." : `Downloading ${Math.round(progress * 100)}%`
+          : busy ? "Update after this run" : "Update and restart"}
+      </button>
+    </section>
   );
 }
 

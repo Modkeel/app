@@ -120,9 +120,27 @@ fn set_taskbar_icon(window: &tauri::WebviewWindow) {
     }
 }
 
+/// Is this build signed for updates? Its tauri.conf.json carries the updater's public key
+/// (plugins.updater) only in builds meant for players; without it the updater plugin would
+/// fail to start, so it is left out and the screen never offers updates.
+fn has_updater(plugins: &tauri::utils::config::PluginConfig) -> bool {
+    plugins
+        .0
+        .get("updater")
+        .and_then(|u| u.get("pubkey"))
+        .and_then(|k| k.as_str())
+        .is_some_and(|k| !k.trim().is_empty())
+}
+
 pub fn run() {
-    let app = tauri::Builder::default()
+    let context = tauri::generate_context!();
+    let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init()) // the pack's mods folder picker
+        .plugin(tauri_plugin_process::init()); // restart into an installed update
+    if has_updater(&context.config().plugins) {
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+    let app = builder
         // The window starts hidden (tauri.conf.json) and is shown here, once its icons are
         // set: the taskbar takes a button's icon when the window first appears.
         .setup(|app| {
@@ -139,7 +157,7 @@ pub fn run() {
             engine_send,
             output_dir
         ])
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building the Modkeel app");
     app.run(|handle, event| {
         if let RunEvent::Exit = event {
@@ -152,4 +170,24 @@ pub fn run() {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::has_updater;
+    use tauri::utils::config::PluginConfig;
+
+    fn plugins(json: serde_json::Value) -> PluginConfig {
+        serde_json::from_value(json).unwrap()
+    }
+
+    #[test]
+    fn updater_only_with_a_public_key() {
+        assert!(has_updater(&plugins(serde_json::json!({
+            "updater": {"pubkey": "dW50cnVzdGVk", "endpoints": ["https://x/latest.json"]}
+        }))));
+        assert!(!has_updater(&plugins(serde_json::json!({}))));
+        assert!(!has_updater(&plugins(serde_json::json!({"updater": {"pubkey": "  "}}))));
+        assert!(!has_updater(&plugins(serde_json::json!({"updater": {"endpoints": []}}))));
+    }
 }
