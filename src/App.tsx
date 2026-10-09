@@ -494,7 +494,7 @@ function GitHubCode({ code }: { code: { code: string; url: string; expiresIn: nu
   return (
     <section className="card warn" data-testid="github-code">
       <div className="title">
-        Sign in with GitHub <span className="pill">{Math.round(code.expiresIn / 60)} min</span>
+        Sign in with GitHub <span className="pill">{Math.max(1, Math.ceil(code.expiresIn / 60))} min</span>
       </div>
       <p className="detail act">
         Enter this code on <span className="mono">{code.url}</span> (it opened in your browser):
