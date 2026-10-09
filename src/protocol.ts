@@ -45,12 +45,16 @@ export interface GetResult {
 
 export type ModStatus = "waiting" | "delivered" | "reused" | "missing" | "unknown";
 
+/** How a JAR was identified: name is a guess the player may want to check, the rest exact
+ * (fingerprint: CurseForge's, for a JAR Modrinth does not know). */
+export type IdentifiedBy = "hash" | "launcher" | "fingerprint" | "name" | null;
+
 /** One JAR of a pack being moved (port): who it is and what became of it. */
 export interface PackRow {
   file: string;
   name: string;
   slug: string | null;
-  identifiedBy: "hash" | "launcher" | "name" | null; // name: a guess the player may want to check
+  identifiedBy: IdentifiedBy;
   status: ModStatus;
   detail: string;
 }
@@ -64,7 +68,7 @@ export interface MoveResult {
   mods: Array<{
     file: string;
     name: string;
-    identified_by: "hash" | "launcher" | "name" | null;
+    identified_by: IdentifiedBy;
     slug: string | null;
     status: ModStatus;
     delivered: Delivery | null;
@@ -154,6 +158,7 @@ export interface GetParams {
 // Same words as the CLI's trail (modkeel/sources.py STRATEGY_LABELS).
 export const STRATEGY_LABELS: Record<string, string> = {
   official: "Official build",
+  curseforge: "CurseForge build",
   official_source: "Author's branch",
   older_official: "Older official build",
   fork: "Community fork",
@@ -336,7 +341,7 @@ function onEvent(state: State, event: EngineEvent): State {
     case "pack_scanned":
       return {
         ...state,
-        pack: (event.mods as Array<[string, string, string | null, "hash" | "launcher" | "name" | null]>).map(
+        pack: (event.mods as Array<[string, string, string | null, IdentifiedBy]>).map(
           ([file, name, slug, identifiedBy]) => ({ file, name, slug, identifiedBy, status: "waiting", detail: "" }),
         ),
       };
