@@ -84,7 +84,21 @@ export interface MoveParams {
   new_instance?: boolean; // also add the pack to its launcher (Prism) as a new instance
 }
 
-export type Method = "get" | "move";
+export type Method = "get" | "move" | "sign_in";
+
+/** sign_in: GitHub's device flow in the engine (modkeel/ghauth.py); the token is saved there. */
+export interface SignInParams {
+  open_browser?: boolean; // the engine opens GitHub's page in the browser itself
+}
+
+export interface SignInResult {
+  signed_in: boolean;
+  user: string | null;
+  reason: string;
+}
+
+/** The answer to need_token that signs in with GitHub instead of pasting a token. */
+export const SIGN_IN_ANSWER = { sign_in: true, open_browser: true };
 
 /** One launcher instance (modkeel/instances.py), from the engine's `instances` query. */
 export interface InstanceInfo {
@@ -117,7 +131,7 @@ export function instanceSummary(i: InstanceInfo): string {
  * A query (the engine's QUERIES: read-only, answered at once, even during a run). Its reply
  * carries its own id and never touches the run's state: the app routes it before reduce().
  */
-export function query(id: string, method: "instances") {
+export function query(id: string, method: "instances" | "github") {
   return { type: "request", id, method, params: {} };
 }
 
@@ -201,6 +215,8 @@ export interface State {
   result: GetResult | null;
   pack: PackRow[] | null; // move: one row per JAR, from pack_scanned on
   moveResult: MoveResult | null;
+  githubCode: { code: string; url: string; expiresIn: number } | null; // while signing in
+  signIn: SignInResult | null; // a sign_in request's outcome
   error: { code: string; message: string } | null;
 }
 
@@ -218,6 +234,8 @@ export const initialState: State = {
   result: null,
   pack: null,
   moveResult: null,
+  githubCode: null,
+  signIn: null,
   error: null,
 };
 
@@ -248,6 +266,9 @@ export function reduce(state: State, message: ServerMessage): State {
       return { ...state, phase: "asking", activity: null, question: { qid: message.qid, payload: message.question } };
     case "result":
       if (message.id !== state.requestId) return state;
+      if (state.method === "sign_in") {
+        return { ...state, phase: "done", githubCode: null, signIn: message.result as unknown as SignInResult };
+      }
       if (state.method === "move") {
         const r = message.result as MoveResult;
         const pack: PackRow[] = r.mods.map((m) => ({
@@ -258,14 +279,14 @@ export function reduce(state: State, message: ServerMessage): State {
           status: m.status,
           detail: m.detail,
         }));
-        return { ...state, phase: "done", activity: null, question: null, moveResult: r, pack, target: r.target };
+        return { ...state, phase: "done", activity: null, question: null, githubCode: null, moveResult: r, pack, target: r.target };
       }
-      return { ...state, phase: "done", activity: null, question: null, result: message.result as GetResult };
+      return { ...state, phase: "done", activity: null, question: null, githubCode: null, result: message.result as GetResult };
     case "error":
       // An error without an id is about a line the app sent badly; with another id it is
       // about an older request. Both still mean this run cannot go on if it was ours.
       if (message.id !== undefined && message.id !== state.requestId) return state;
-      return { ...state, phase: "failed", activity: null, question: null, error: message.error };
+      return { ...state, phase: "failed", activity: null, question: null, githubCode: null, error: message.error };
   }
 }
 
@@ -306,6 +327,12 @@ function onEvent(state: State, event: EngineEvent): State {
       return { ...state, activity: "Looking for the nearest Minecraft version where it runs" };
     case "saved":
       return { ...state, files: [...state.files, String(event.path)] };
+    case "github_code":
+      return {
+        ...state,
+        activity: "Waiting for GitHub",
+        githubCode: { code: String(event.code), url: String(event.url), expiresIn: Number(event.expires_in) },
+      };
     case "pack_scanned":
       return {
         ...state,
@@ -343,7 +370,7 @@ export function answered(state: State, value: unknown): State {
   return { ...state, phase: "running", question: null, target, pack: again };
 }
 
-export function request(id: string, params: GetParams | MoveParams, method: Method = "get") {
+export function request(id: string, params: GetParams | MoveParams | SignInParams, method: Method = "get") {
   return { type: "request", id, method, params };
 }
 

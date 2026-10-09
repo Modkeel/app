@@ -15,6 +15,8 @@ import {
   Method,
   PackRow,
   MoveParams,
+  SIGN_IN_ANSWER,
+  SignInParams,
   QuestionPayload,
   ServerMessage,
   State,
@@ -59,8 +61,9 @@ const LOADERS = [
   { value: "quilt", label: "Quilt" },
 ];
 
-// The id of the instances query: requests count from 1, so it never meets a run's id.
+// The ids of the queries: requests count from 1, so they never meet a run's id.
 const INSTANCES_QUERY = "instances";
+const GITHUB_QUERY = "github"; // is a GitHub token saved? (else: offer "Sign in with GitHub")
 
 // For a pack the loader is read from its JARs unless the player picks one.
 const PACK_LOADERS = [{ value: "", label: "From the mods" }, ...LOADERS];
@@ -69,12 +72,13 @@ export default function App({ transport: given }: { transport?: Transport }) {
   // One transport (one engine) for the app's life: created once, never per render.
   const [transport] = useState<Transport>(() => given ?? defaultTransport());
   const [state, dispatch] = useReducer(appReducer, initialState);
-  const [tab, setTab] = useState<Method>("get");
+  const [tab, setTab] = useState<"get" | "move">("get");
   const [getForm, setGetForm] = useState<GetParams>({ query: "", mc_version: "", loader: "fabric" });
   const [moveForm, setMoveForm] = useState<MoveParams>({ mods_dir: "", mc_version: "", loader: "" });
   const nextId = useRef(1);
   const [outputDir, setOutputDir] = useState<string | null>(null);
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null); // null: not known yet
 
   useEffect(() => {
     transport
@@ -87,6 +91,10 @@ export default function App({ transport: given }: { transport?: Transport }) {
             return;
           }
           if (message.type === "error" && message.id === INSTANCES_QUERY) return; // folder still works
+          if ("id" in message && message.id === GITHUB_QUERY) {
+            if (message.type === "result") setSignedIn(Boolean((message.result as { signed_in?: boolean }).signed_in));
+            return;
+          }
           dispatch({ type: "server", message });
         },
         (why) => dispatch({ type: "lost", why }),
@@ -102,10 +110,16 @@ export default function App({ transport: given }: { transport?: Transport }) {
     if (engineMethods?.includes("instances")) transport.send(query(INSTANCES_QUERY, "instances"));
   }, [engineMethods, transport]);
 
+  // whether GitHub is signed in: at hello, and after each run (a run may have signed in)
+  const finished = state.phase === "done" || state.phase === "failed";
+  useEffect(() => {
+    if (engineMethods?.includes("github")) transport.send(query(GITHUB_QUERY, "github"));
+  }, [engineMethods, finished, transport]);
+
   const busy = state.phase === "running" || state.phase === "asking";
   const ready = !busy && state.engine !== null;
 
-  function start(method: Method, target: string, params: GetParams | MoveParams) {
+  function start(method: Method, target: string, params: GetParams | MoveParams | SignInParams) {
     const id = String(nextId.current++);
     dispatch({ type: "started", id, target, method });
     transport.send(request(id, outputDir ? { ...params, output_dir: outputDir } : params, method));
@@ -126,10 +140,17 @@ export default function App({ transport: given }: { transport?: Transport }) {
         <img className="logo" src={logo} alt="" width={32} height={32} />
         <h1>Modkeel</h1>
         {state.engine && <span className="pill">engine {state.engine.version}</span>}
+        <span className="spacer" />
+        {signedIn === true && <span className="pill" title="A GitHub token is saved: forks can be searched">GitHub ✓</span>}
+        {signedIn === false && engineMethods?.includes("sign_in") && (
+          <button disabled={!ready} onClick={() => start("sign_in", "", { open_browser: true })}>
+            Sign in with GitHub
+          </button>
+        )}
       </header>
       <main className="panel">
         <nav className="tabs" role="tablist">
-          {(["get", "move"] as Method[]).map((m) => (
+          {(["get", "move"] as const).map((m) => (
             <button
               key={m}
               role="tab"
@@ -160,6 +181,8 @@ export default function App({ transport: given }: { transport?: Transport }) {
         {showing && state.method === "get" && <Progress state={state} />}
         {showing && state.method === "move" && state.pack && <PackList state={state} />}
         {showing && state.question && <Question payload={state.question.payload} onAnswer={reply} />}
+        {state.githubCode && busy && <GitHubCode code={state.githubCode} />}
+        {state.method === "sign_in" && state.signIn && <SignInDone result={state.signIn} />}
         {showing && state.result && <Result state={state} />}
         {state.error && (
           <section className="card bad">
@@ -452,11 +475,49 @@ function Question({ payload, onAnswer }: { payload: QuestionPayload; onAnswer: (
           value={token}
           onChange={(e) => setToken(e.target.value)}
         />
-        <button className="primary" disabled={!token} onClick={() => onAnswer(token)}>
-          Search forks
+        <button disabled={!token} onClick={() => onAnswer(token)}>
+          Use this token
+        </button>
+      </div>
+      <div className="row">
+        <button className="primary" onClick={() => onAnswer(SIGN_IN_ANSWER)}>
+          Sign in with GitHub
         </button>
         <button onClick={() => onAnswer(null)}>Skip forks</button>
       </div>
+    </section>
+  );
+}
+
+/** While signing in: the code to type on GitHub's page (the engine opened it). */
+function GitHubCode({ code }: { code: { code: string; url: string; expiresIn: number } }) {
+  return (
+    <section className="card warn" data-testid="github-code">
+      <div className="title">
+        Sign in with GitHub <span className="pill">{Math.round(code.expiresIn / 60)} min</span>
+      </div>
+      <p className="detail act">
+        Enter this code on <span className="mono">{code.url}</span> (it opened in your browser):
+      </p>
+      <div className="row">
+        <span className="code mono">{code.code}</span>
+        <button onClick={() => navigator.clipboard?.writeText(code.code).catch(() => undefined)}>Copy</button>
+      </div>
+      <p className="detail">Modkeel only reads public data with it; the token stays on this computer.</p>
+    </section>
+  );
+}
+
+function SignInDone({ result }: { result: { signed_in: boolean; user: string | null; reason: string } }) {
+  return result.signed_in ? (
+    <section className="card ok" data-testid="signed-in">
+      <div className="title">Signed in with GitHub{result.user ? ` as ${result.user}` : ""}</div>
+      <p className="detail">Forks can be searched now, under your own GitHub limit.</p>
+    </section>
+  ) : (
+    <section className="card bad" data-testid="signed-in">
+      <div className="title">Not signed in</div>
+      <p className="detail">{result.reason}</p>
     </section>
   );
 }

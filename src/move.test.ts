@@ -6,8 +6,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   InstanceInfo,
+  SIGN_IN_ANSWER,
   ServerMessage,
   State,
+  answer,
   answered,
   initialState,
   instanceSummary,
@@ -128,5 +130,26 @@ describe("launcher instances", () => {
     const running = started(initialState, "1", "1.21.10", "move");
     const reply = { type: "result", id: "instances", result: { instances: [atm] } } as unknown as ServerMessage;
     expect(reduce(running, reply)).toBe(running); // another id: the run is untouched
+  });
+});
+
+describe("sign in with GitHub", () => {
+  it("shows the code while waiting and keeps the outcome", () => {
+    let state = started(initialState, "4", "", "sign_in");
+    state = reduce(state, {
+      type: "event", id: "4",
+      event: { kind: "github_code", code: "ABCD-1234", url: "https://github.com/login/device", expires_in: 900 },
+    } as ServerMessage);
+    expect(state.githubCode).toEqual({ code: "ABCD-1234", url: "https://github.com/login/device", expiresIn: 900 });
+    state = reduce(state, {
+      type: "result", id: "4", result: { signed_in: true, user: "juan", reason: "" },
+    } as unknown as ServerMessage);
+    expect(state.githubCode).toBeNull();
+    expect(state.signIn).toEqual({ signed_in: true, user: "juan", reason: "" });
+    expect(state.result).toBeNull(); // never read as a get result
+  });
+
+  it("answers need_token with a sign-in the engine runs", () => {
+    expect(answer("1.1", SIGN_IN_ANSWER)).toEqual({ type: "answer", qid: "1.1", value: { sign_in: true, open_browser: true } });
   });
 });

@@ -113,6 +113,8 @@ main.panel {
 .row { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
 .row label, .row .field { display: flex; flex-direction: column; gap: 3px; color: var(--detail); font-size: 12px; }
 .grow { flex: 1; min-width: 180px; }
+.spacer { flex: 1; }                       /* pushes the header's GitHub state to the right */
+.code { font-size: 22px; letter-spacing: 3px; padding: 4px 10px; background: var(--pill); }
 .instance-summary { margin: 0 0 8px; }   /* beside the picker, on its baseline */
 .row.instances { margin-bottom: 10px; }
 label.check { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0 0 10px; }
