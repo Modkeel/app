@@ -4,7 +4,18 @@
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { ServerMessage, State, answered, initialState, reduce, request, started } from "./protocol";
+import {
+  InstanceInfo,
+  ServerMessage,
+  State,
+  answered,
+  initialState,
+  instanceSummary,
+  query,
+  reduce,
+  request,
+  started,
+} from "./protocol";
 
 type Line = { from: "server" | "client"; message: Record<string, unknown> };
 
@@ -76,5 +87,32 @@ describe("rules", () => {
     const after = answered(state, true);
     expect(after.target).toBe("1.21.1");
     expect(after.pack![0]).toMatchObject({ status: "waiting", detail: "" });
+  });
+});
+
+describe("launcher instances", () => {
+  const atm: InstanceInfo = {
+    launcher: "prism",
+    name: "All the Mods 10",
+    path: "/i/atm",
+    mods_dir: "/i/atm/minecraft/mods",
+    mc_version: "1.21.1",
+    loader: "neoforge",
+    loader_version: "21.1.77",
+    mods: 84,
+  };
+
+  it("sums an instance up in one line", () => {
+    expect(instanceSummary(atm)).toBe("1.21.1 · NeoForge · 84 mods · Prism Launcher");
+    expect(instanceSummary({ ...atm, launcher: "minecraft", mc_version: null, loader: null, mods: 1 })).toBe(
+      "1 mod · Minecraft Launcher",
+    );
+  });
+
+  it("asks for them with a query that never becomes the run", () => {
+    expect(query("instances", "instances")).toEqual({ type: "request", id: "instances", method: "instances", params: {} });
+    const running = started(initialState, "1", "1.21.10", "move");
+    const reply = { type: "result", id: "instances", result: { instances: [atm] } } as unknown as ServerMessage;
+    expect(reduce(running, reply)).toBe(running); // another id: the run is untouched
   });
 });

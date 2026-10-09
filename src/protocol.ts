@@ -82,6 +82,41 @@ export interface MoveParams {
 
 export type Method = "get" | "move";
 
+/** One launcher instance (modkeel/instances.py), from the engine's `instances` query. */
+export interface InstanceInfo {
+  launcher: "prism" | "modrinth" | "curseforge" | "minecraft";
+  name: string;
+  path: string;
+  mods_dir: string;
+  mc_version: string | null;
+  loader: string | null;
+  loader_version: string | null;
+  mods: number;
+}
+
+export const LAUNCHER_LABELS: Record<InstanceInfo["launcher"], string> = {
+  prism: "Prism Launcher",
+  modrinth: "Modrinth App",
+  curseforge: "CurseForge",
+  minecraft: "Minecraft Launcher",
+};
+
+/** "1.21.1 · NeoForge · 84 mods · Prism Launcher": what an instance runs, in one line. */
+export function instanceSummary(i: InstanceInfo): string {
+  const loader = i.loader ? i.loader.replace(/^neoforge$/, "NeoForge").replace(/^./, (c) => c.toUpperCase()) : null;
+  return [i.mc_version, loader, `${i.mods} mod${i.mods === 1 ? "" : "s"}`, LAUNCHER_LABELS[i.launcher]]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/**
+ * A query (the engine's QUERIES: read-only, answered at once, even during a run). Its reply
+ * carries its own id and never touches the run's state: the app routes it before reduce().
+ */
+export function query(id: string, method: "instances") {
+  return { type: "request", id, method, params: {} };
+}
+
 export type ServerMessage =
   | { type: "hello"; protocol: number; modkeel: string; methods: string[] }
   | { type: "event"; id: string; event: EngineEvent }

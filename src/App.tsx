@@ -1,7 +1,8 @@
 // The app's screen: two jobs in tabs, one engine.
 //
 //   Get a mod     one mod for a Minecraft version (engine method `get`)
-//   Move a pack   a mods folder moved to another Minecraft version (method `move`)
+//   Move a pack   a mods folder moved to another Minecraft version (method `move`); the
+//                 player's launcher instances are offered first (query `instances`)
 //
 // All state comes from protocol.reduce; this file only renders it and turns clicks into
 // protocol messages. Questions (token, version change) are the same cards for both jobs.
@@ -9,6 +10,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import {
   GetParams,
+  InstanceInfo,
   Method,
   PackRow,
   MoveParams,
@@ -18,6 +20,8 @@ import {
   answer,
   answered,
   initialState,
+  instanceSummary,
+  query,
   reduce,
   request,
   started,
@@ -54,6 +58,9 @@ const LOADERS = [
   { value: "quilt", label: "Quilt" },
 ];
 
+// The id of the instances query: requests count from 1, so it never meets a run's id.
+const INSTANCES_QUERY = "instances";
+
 // For a pack the loader is read from its JARs unless the player picks one.
 const PACK_LOADERS = [{ value: "", label: "From the mods" }, ...LOADERS];
 
@@ -66,17 +73,33 @@ export default function App({ transport: given }: { transport?: Transport }) {
   const [moveForm, setMoveForm] = useState<MoveParams>({ mods_dir: "", mc_version: "", loader: "" });
   const nextId = useRef(1);
   const [outputDir, setOutputDir] = useState<string | null>(null);
+  const [instances, setInstances] = useState<InstanceInfo[]>([]);
 
   useEffect(() => {
     transport
       .start(
-        (line) => dispatch({ type: "server", message: JSON.parse(line) as ServerMessage }),
+        (line) => {
+          const message = JSON.parse(line) as ServerMessage;
+          // the instances query's reply is not part of any run: keep it out of reduce()
+          if (message.type === "result" && message.id === INSTANCES_QUERY) {
+            setInstances((message.result as unknown as { instances: InstanceInfo[] }).instances);
+            return;
+          }
+          if (message.type === "error" && message.id === INSTANCES_QUERY) return; // folder still works
+          dispatch({ type: "server", message });
+        },
         (why) => dispatch({ type: "lost", why }),
       )
       .catch((e: Error) => dispatch({ type: "lost", why: e.message }));
     transport.outputDir().then(setOutputDir, () => setOutputDir(null));
     return () => transport.stop();
   }, [transport]);
+
+  // once the engine says hello (again, after a reload too), ask for the instances if it can
+  const engineMethods = state.engine?.methods;
+  useEffect(() => {
+    if (engineMethods?.includes("instances")) transport.send(query(INSTANCES_QUERY, "instances"));
+  }, [engineMethods, transport]);
 
   const busy = state.phase === "running" || state.phase === "asking";
   const ready = !busy && state.engine !== null;
@@ -128,6 +151,7 @@ export default function App({ transport: given }: { transport?: Transport }) {
             busy={busy}
             onStart={start}
             pickFolder={() => transport.pickFolder()}
+            instances={instances}
           />
         )}
         {state.phase === "connecting" && <p className="detail">Starting the engine...</p>}
@@ -215,13 +239,37 @@ function MoveForm(props: {
   busy: boolean;
   onStart: StartFn;
   pickFolder: () => Promise<string | null>;
+  instances: InstanceInfo[];
 }) {
-  const { form, setForm, ready, busy, onStart, pickFolder } = props;
+  const { form, setForm, ready, busy, onStart, pickFolder, instances } = props;
   const can = ready && form.mods_dir.trim() !== "" && form.mc_version.trim() !== "";
+  const picked = instances.find((i) => i.mods_dir === form.mods_dir) ?? null;
+  const options = [
+    { value: "", label: instances.length ? "Pick one, or a folder below" : "None found" },
+    ...instances.map((i) => ({ value: i.mods_dir, label: i.name })),
+  ];
   return (
     <section className="card">
       <div className="title">Move a pack</div>
       <p className="detail">Your mods folder is only read; the new pack goes to its own folder.</p>
+      {instances.length > 0 && (
+        <div className="row instances">
+          <div className="field">
+            Your instances
+            <Select
+              name="instance"
+              value={picked?.mods_dir ?? ""}
+              options={options}
+              onChange={(dir) => {
+                const i = instances.find((x) => x.mods_dir === dir);
+                // the instance's own loader: no need to read it from the JARs
+                setForm({ ...form, mods_dir: dir, loader: i?.loader ?? "" });
+              }}
+            />
+          </div>
+          {picked && <p className="detail instance-summary">{instanceSummary(picked)}</p>}
+        </div>
+      )}
       <form
         className="row"
         onSubmit={(e) => {

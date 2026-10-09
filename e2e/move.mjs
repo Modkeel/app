@@ -1,5 +1,7 @@
 // End-to-end "Move a pack": the screen in Chromium, the real engine behind the dev bridge,
-// a real mods folder (MODKEEL_E2E_PACK: a 1.21.1 Fabric pack) moved to 1.21.10.
+// a real mods folder (MODKEEL_E2E_PACK: a 1.21.1 Fabric pack) moved to 1.21.10. With
+// MODKEEL_E2E_INSTANCE the pack is picked by that name from "Your instances" instead (the
+// engine finds it in its HOME's launchers, so set HOME to where that instance lives).
 //
 //   npm run build && MODKEEL_E2E_PACK=/path/to/mods node e2e/move.mjs     (network: Modrinth)
 
@@ -10,7 +12,8 @@ import { join } from "node:path";
 import { chromium } from "playwright-core";
 
 const pack = process.env.MODKEEL_E2E_PACK;
-if (!pack) throw new Error("set MODKEEL_E2E_PACK to a mods folder");
+const instance = process.env.MODKEEL_E2E_INSTANCE;
+if (!pack && !instance) throw new Error("set MODKEEL_E2E_PACK to a mods folder (or MODKEEL_E2E_INSTANCE)");
 const shots = new URL("./screenshots/", import.meta.url).pathname;
 mkdirSync(shots, { recursive: true });
 const work = mkdtempSync(join(tmpdir(), "modkeel-e2e-"));
@@ -23,7 +26,13 @@ try {
   await page.goto("http://127.0.0.1:4798/?bridge=8798");
   await page.getByText(/engine \d/).waitFor({ timeout: 20000 });
   await page.getByRole("tab", { name: "Move a pack" }).click();
-  await page.fill("input[name=mods_dir]", pack);
+  if (instance) {
+    await page.click("button[name=instance]");
+    await page.getByRole("option", { name: instance }).click();
+    if (!(await page.inputValue("input[name=mods_dir]"))) throw new Error("the instance filled no folder");
+  } else {
+    await page.fill("input[name=mods_dir]", pack);
+  }
   await page.fill("input[name=move_mc_version]", "1.21.10");
   await page.screenshot({ path: shots + "move-1-form.png" });
   await page.click("text=Move it");

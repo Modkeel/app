@@ -9,13 +9,15 @@ docs/ideas/IDEA-023-modkeel-app.md for the product).
 src/                React + Vite screen (Keel look, docs/companion-ui-style.md)
   protocol.ts       protocol types + a pure reducer: server messages -> screen state
   transport.ts      Tauri in the app, a WebSocket to the dev bridge in a browser
-  App.tsx           two tabs: Get a mod (method get), Move a pack (method move: a mods
-                    folder, the system folder picker, one row per JAR as it resolves)
+  App.tsx           two tabs: Get a mod (method get), Move a pack (method move: the
+                    player's launcher instances (query instances) or a mods folder, the
+                    system folder picker, one row per JAR as it resolves)
 src-tauri/          Tauri 2 (Rust): starts the engine, relays lines both ways, kills it on exit
   src/engine.rs     the child process (no Tauri inside, unit-tested with sh)
 scripts/dev-bridge.mjs   WebSocket <-> `modkeel serve --stdio`, for the browser and the e2e
 e2e/get.mjs, move.mjs  Chromium + dev bridge + the real engine: a full get / a pack moved
-                    (MODKEEL_E2E_PACK=<mods folder>), with screenshots
+                    (MODKEEL_E2E_PACK=<mods folder>, or MODKEEL_E2E_INSTANCE=<name> picked
+                    from the list), with screenshots
 ```
 
 Which engine runs: `MODKEEL_ENGINE` (e.g. `python3 -m modkeel.cli serve --stdio`), else the
