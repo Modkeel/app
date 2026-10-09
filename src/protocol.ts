@@ -55,7 +55,7 @@ export interface PackRow {
   detail: string;
 }
 
-export interface PortResult {
+export interface MoveResult {
   target: string;
   loader: string;
   output_dir: string;
@@ -73,20 +73,20 @@ export interface PortResult {
   proposal: TargetOption | null;
 }
 
-export interface PortParams {
+export interface MoveParams {
   mods_dir: string;
   mc_version: string;
   loader?: string;
   output_dir?: string;
 }
 
-export type Method = "get" | "port";
+export type Method = "get" | "move";
 
 export type ServerMessage =
   | { type: "hello"; protocol: number; modkeel: string; methods: string[] }
   | { type: "event"; id: string; event: EngineEvent }
   | { type: "question"; id: string; qid: string; question: QuestionPayload }
-  | { type: "result"; id: string; result: GetResult | PortResult }
+  | { type: "result"; id: string; result: GetResult | MoveResult }
   | { type: "error"; id?: string; error: { code: string; message: string } };
 
 export interface GetParams {
@@ -160,8 +160,8 @@ export interface State {
   files: string[]; // every JAR written, in order
   question: { qid: string; payload: QuestionPayload } | null;
   result: GetResult | null;
-  pack: PackRow[] | null; // port: one row per JAR, from pack_scanned on
-  portResult: PortResult | null;
+  pack: PackRow[] | null; // move: one row per JAR, from pack_scanned on
+  moveResult: MoveResult | null;
   error: { code: string; message: string } | null;
 }
 
@@ -178,7 +178,7 @@ export const initialState: State = {
   question: null,
   result: null,
   pack: null,
-  portResult: null,
+  moveResult: null,
   error: null,
 };
 
@@ -209,8 +209,8 @@ export function reduce(state: State, message: ServerMessage): State {
       return { ...state, phase: "asking", activity: null, question: { qid: message.qid, payload: message.question } };
     case "result":
       if (message.id !== state.requestId) return state;
-      if (state.method === "port") {
-        const r = message.result as PortResult;
+      if (state.method === "move") {
+        const r = message.result as MoveResult;
         const pack: PackRow[] = r.mods.map((m) => ({
           file: m.file,
           name: m.name,
@@ -219,7 +219,7 @@ export function reduce(state: State, message: ServerMessage): State {
           status: m.status,
           detail: m.detail,
         }));
-        return { ...state, phase: "done", activity: null, question: null, portResult: r, pack, target: r.target };
+        return { ...state, phase: "done", activity: null, question: null, moveResult: r, pack, target: r.target };
       }
       return { ...state, phase: "done", activity: null, question: null, result: message.result as GetResult };
     case "error":
@@ -304,7 +304,7 @@ export function answered(state: State, value: unknown): State {
   return { ...state, phase: "running", question: null, target, pack: again };
 }
 
-export function request(id: string, params: GetParams | PortParams, method: Method = "get") {
+export function request(id: string, params: GetParams | MoveParams, method: Method = "get") {
   return { type: "request", id, method, params };
 }
 

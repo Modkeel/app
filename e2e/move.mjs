@@ -1,7 +1,7 @@
 // End-to-end "Move a pack": the screen in Chromium, the real engine behind the dev bridge,
 // a real mods folder (MODKEEL_E2E_PACK: a 1.21.1 Fabric pack) moved to 1.21.10.
 //
-//   npm run build && MODKEEL_E2E_PACK=/path/to/mods node e2e/port.mjs     (network: Modrinth)
+//   npm run build && MODKEEL_E2E_PACK=/path/to/mods node e2e/move.mjs     (network: Modrinth)
 
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync } from "node:fs";
@@ -24,11 +24,11 @@ try {
   await page.getByText(/engine \d/).waitFor({ timeout: 20000 });
   await page.getByRole("tab", { name: "Move a pack" }).click();
   await page.fill("input[name=mods_dir]", pack);
-  await page.fill("input[name=port_mc_version]", "1.21.10");
-  await page.screenshot({ path: shots + "port-1-form.png" });
+  await page.fill("input[name=move_mc_version]", "1.21.10");
+  await page.screenshot({ path: shots + "move-1-form.png" });
   await page.click("text=Move it");
   await page.getByText(/of \d+ ready/).waitFor({ timeout: 60000 });
-  await page.screenshot({ path: shots + "port-2-progress.png" });
+  await page.screenshot({ path: shots + "move-2-progress.png" });
   // a token question may come (forks): skip it
   const result = page.getByTestId("result");
   while (!(await result.count())) {
@@ -37,10 +37,10 @@ try {
     await page.waitForTimeout(1000);
   }
   const text = await result.innerText();
-  await page.screenshot({ path: shots + "port-3-done.png", fullPage: true });
+  await page.screenshot({ path: shots + "move-3-done.png", fullPage: true });
   await browser.close();
   if (!/\d+ of \d+ ready/.test(text) || !text.includes("mc-1.21.10")) throw new Error("result card:\n" + text);
-  console.log("e2e port ok: " + text.split("\n")[0]);
+  console.log("e2e move ok: " + text.split("\n")[0]);
 } finally {
   bridge.kill();
   preview.kill();

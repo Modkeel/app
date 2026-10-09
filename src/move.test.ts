@@ -8,7 +8,7 @@ import { ServerMessage, State, answered, initialState, reduce, request, started 
 
 type Line = { from: "server" | "client"; message: Record<string, unknown> };
 
-const session: Line[] = readFileSync(new URL("./__fixtures__/port-pack.jsonl", import.meta.url), "utf8")
+const session: Line[] = readFileSync(new URL("./__fixtures__/move-pack.jsonl", import.meta.url), "utf8")
   .trim()
   .split("\n")
   .map((l: string) => JSON.parse(l));
@@ -17,14 +17,14 @@ function replay(until?: (s: State) => boolean): State {
   let state = initialState;
   for (const { from, message } of session) {
     if (from === "server") state = reduce(state, message as unknown as ServerMessage);
-    else if (message.type === "request") state = started(state, String(message.id), "1.21.10", "port");
+    else if (message.type === "request") state = started(state, String(message.id), "1.21.10", "move");
     else if (message.type === "answer") state = answered(state, message.value);
     if (until?.(state)) return state;
   }
   return state;
 }
 
-describe("a recorded port", () => {
+describe("a recorded move", () => {
   it("lists every JAR as soon as the folder is read, all waiting", () => {
     const state = replay((s) => s.pack !== null);
     expect(state.pack).toHaveLength(8);
@@ -44,26 +44,26 @@ describe("a recorded port", () => {
   it("ends with every row's final status, the private JAR reused", () => {
     const state = replay();
     expect(state.phase).toBe("done");
-    expect(state.portResult).toMatchObject({ ready: 8, target: "1.21.10", loader: "fabric" });
+    expect(state.moveResult).toMatchObject({ ready: 8, target: "1.21.10", loader: "fabric" });
     const status = Object.fromEntries(state.pack!.map((r) => [r.file, r.status]));
     expect(status["private-menu-2.0.jar"]).toBe("reused");
     expect(Object.values(status).filter((s) => s === "delivered")).toHaveLength(7);
-    expect(state.result).toBeNull(); // a port result never lands in the get result
+    expect(state.result).toBeNull(); // a move result never lands in the get result
   });
 });
 
 describe("rules", () => {
-  it("builds a port request", () => {
-    expect(request("2", { mods_dir: "/m", mc_version: "1.21.10" }, "port")).toEqual({
+  it("builds a move request", () => {
+    expect(request("2", { mods_dir: "/m", mc_version: "1.21.10" }, "move")).toEqual({
       type: "request",
       id: "2",
-      method: "port",
+      method: "move",
       params: { mods_dir: "/m", mc_version: "1.21.10" },
     });
   });
 
   it("an accepted version change puts every row back to waiting", () => {
-    let state = started(initialState, "1", "1.21.10", "port");
+    let state = started(initialState, "1", "1.21.10", "move");
     state = { ...state, pack: [{ file: "a.jar", name: "A", slug: "a", identifiedBy: "hash", status: "missing", detail: "x" }] };
     state = {
       ...state,

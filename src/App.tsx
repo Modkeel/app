@@ -1,7 +1,7 @@
 // The app's screen: two jobs in tabs, one engine.
 //
 //   Get a mod     one mod for a Minecraft version (engine method `get`)
-//   Move a pack   a mods folder moved to another Minecraft version (method `port`)
+//   Move a pack   a mods folder moved to another Minecraft version (method `move`)
 //
 // All state comes from protocol.reduce; this file only renders it and turns clicks into
 // protocol messages. Questions (token, version change) are the same cards for both jobs.
@@ -11,7 +11,7 @@ import {
   GetParams,
   Method,
   PackRow,
-  PortParams,
+  MoveParams,
   QuestionPayload,
   ServerMessage,
   State,
@@ -63,7 +63,7 @@ export default function App({ transport: given }: { transport?: Transport }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
   const [tab, setTab] = useState<Method>("get");
   const [getForm, setGetForm] = useState<GetParams>({ query: "", mc_version: "", loader: "fabric" });
-  const [portForm, setPortForm] = useState<PortParams>({ mods_dir: "", mc_version: "", loader: "" });
+  const [moveForm, setMoveForm] = useState<MoveParams>({ mods_dir: "", mc_version: "", loader: "" });
   const nextId = useRef(1);
   const [outputDir, setOutputDir] = useState<string | null>(null);
 
@@ -81,7 +81,7 @@ export default function App({ transport: given }: { transport?: Transport }) {
   const busy = state.phase === "running" || state.phase === "asking";
   const ready = !busy && state.engine !== null;
 
-  function start(method: Method, target: string, params: GetParams | PortParams) {
+  function start(method: Method, target: string, params: GetParams | MoveParams) {
     const id = String(nextId.current++);
     dispatch({ type: "started", id, target, method });
     transport.send(request(id, outputDir ? { ...params, output_dir: outputDir } : params, method));
@@ -105,7 +105,7 @@ export default function App({ transport: given }: { transport?: Transport }) {
       </header>
       <main className="panel">
         <nav className="tabs" role="tablist">
-          {(["get", "port"] as Method[]).map((m) => (
+          {(["get", "move"] as Method[]).map((m) => (
             <button
               key={m}
               role="tab"
@@ -121,9 +121,9 @@ export default function App({ transport: given }: { transport?: Transport }) {
         {tab === "get" ? (
           <GetForm form={getForm} setForm={setGetForm} ready={ready} busy={busy} onStart={start} />
         ) : (
-          <PortForm
-            form={portForm}
-            setForm={setPortForm}
+          <MoveForm
+            form={moveForm}
+            setForm={setMoveForm}
             ready={ready}
             busy={busy}
             onStart={start}
@@ -133,7 +133,7 @@ export default function App({ transport: given }: { transport?: Transport }) {
         {state.phase === "connecting" && <p className="detail">Starting the engine...</p>}
 
         {showing && state.method === "get" && <Progress state={state} />}
-        {showing && state.method === "port" && state.pack && <PackList state={state} />}
+        {showing && state.method === "move" && state.pack && <PackList state={state} />}
         {showing && state.question && <Question payload={state.question.payload} onAnswer={reply} />}
         {showing && state.result && <Result state={state} />}
         {state.error && (
@@ -149,7 +149,7 @@ export default function App({ transport: given }: { transport?: Transport }) {
   );
 }
 
-type StartFn = (method: Method, target: string, params: GetParams | PortParams) => void;
+type StartFn = (method: Method, target: string, params: GetParams | MoveParams) => void;
 
 function GetForm(props: {
   form: GetParams;
@@ -208,9 +208,9 @@ function GetForm(props: {
   );
 }
 
-function PortForm(props: {
-  form: PortParams;
-  setForm: (f: PortParams) => void;
+function MoveForm(props: {
+  form: MoveParams;
+  setForm: (f: MoveParams) => void;
   ready: boolean;
   busy: boolean;
   onStart: StartFn;
@@ -227,9 +227,9 @@ function PortForm(props: {
         onSubmit={(e) => {
           e.preventDefault();
           if (!can) return;
-          const params: PortParams = { mods_dir: form.mods_dir.trim(), mc_version: form.mc_version.trim() };
+          const params: MoveParams = { mods_dir: form.mods_dir.trim(), mc_version: form.mc_version.trim() };
           if (form.loader) params.loader = form.loader;
-          onStart("port", params.mc_version, params);
+          onStart("move", params.mc_version, params);
         }}
       >
         <label className="grow">
@@ -253,7 +253,7 @@ function PortForm(props: {
         <label>
           To Minecraft
           <input
-            name="port_mc_version"
+            name="move_mc_version"
             placeholder="1.21.10"
             size={8}
             value={form.mc_version}
@@ -263,7 +263,7 @@ function PortForm(props: {
         <div className="field">
           Loader
           <Select
-            name="port_loader"
+            name="move_loader"
             value={form.loader ?? ""}
             options={PACK_LOADERS}
             onChange={(loader) => setForm({ ...form, loader })}
@@ -310,7 +310,7 @@ const MARK: Record<PackRow["status"], [string, string]> = {
 function PackList({ state }: { state: State }) {
   const rows = state.pack!;
   const done = rows.filter((r) => r.status === "delivered" || r.status === "reused").length;
-  const r = state.portResult;
+  const r = state.moveResult;
   const edge = r ? (r.ready === rows.length ? "ok" : r.ready > 0 ? "warn" : "bad") : "";
   return (
     <section className={`card ${edge}`} data-testid={r ? "result" : "progress"}>
