@@ -1,7 +1,8 @@
 // End-to-end "Move a pack": the screen in Chromium, the real engine behind the dev bridge,
 // a real mods folder (MODKEEL_E2E_PACK: a 1.21.1 Fabric pack) moved to 1.21.10. With
 // MODKEEL_E2E_INSTANCE the pack is picked by that name from "Your instances" instead (the
-// engine finds it in its HOME's launchers, so set HOME to where that instance lives).
+// engine finds it in its HOME's launchers, so set HOME to where that instance lives);
+// MODKEEL_E2E_EXPECT_NEW=1 then requires the card to report the new Prism instance.
 //
 //   npm run build && MODKEEL_E2E_PACK=/path/to/mods node e2e/move.mjs     (network: Modrinth)
 
@@ -30,6 +31,9 @@ try {
     await page.click("button[name=instance]");
     await page.getByRole("option", { name: instance }).click();
     if (!(await page.inputValue("input[name=mods_dir]"))) throw new Error("the instance filled no folder");
+    // a Prism instance: the new instance beside it is offered, on by default
+    const add = page.locator("input[name=new_instance]");
+    if ((await add.count()) && !(await add.isChecked())) throw new Error("new instance not offered on");
   } else {
     await page.fill("input[name=mods_dir]", pack);
   }
@@ -49,6 +53,9 @@ try {
   await page.screenshot({ path: shots + "move-3-done.png", fullPage: true });
   await browser.close();
   if (!/\d+ of \d+ ready/.test(text) || !text.includes("mc-1.21.10")) throw new Error("result card:\n" + text);
+  if (instance && process.env.MODKEEL_E2E_EXPECT_NEW && !text.includes("Added to Prism Launcher")) {
+    throw new Error("no new instance:\n" + text);
+  }
   console.log("e2e move ok: " + text.split("\n")[0]);
 } finally {
   bridge.kill();

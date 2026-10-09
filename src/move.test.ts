@@ -73,6 +73,20 @@ describe("rules", () => {
     });
   });
 
+  it("asks for a new instance only when told, and keeps the one made", () => {
+    const params = { mods_dir: "/m", mc_version: "1.21.10", new_instance: true };
+    expect(request("3", params, "move").params).toEqual(params);
+    const instance = { launcher: "prism", name: "ATM (1.21.10)", path: "/i/ATM 1.21.10",
+                       mods_dir: "/i/ATM 1.21.10/minecraft/mods", mc_version: "1.21.10",
+                       loader: "neoforge", loader_version: "21.10.64", mods: 2 } as const;
+    const state = reduce(started(initialState, "3", "1.21.10", "move"), {
+      type: "result", id: "3",
+      result: { target: "1.21.10", loader: "neoforge", output_dir: "out/mc-1.21.10", retargeted: false,
+                ready: 0, mods: [], proposal: null, instance, instance_note: "" },
+    } as ServerMessage);
+    expect(state.moveResult?.instance?.name).toBe("ATM (1.21.10)");
+  });
+
   it("an accepted version change puts every row back to waiting", () => {
     let state = started(initialState, "1", "1.21.10", "move");
     state = { ...state, pack: [{ file: "a.jar", name: "A", slug: "a", identifiedBy: "hash", status: "missing", detail: "x" }] };

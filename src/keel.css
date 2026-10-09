@@ -115,6 +115,8 @@ main.panel {
 .grow { flex: 1; min-width: 180px; }
 .instance-summary { margin: 0 0 8px; }   /* beside the picker, on its baseline */
 .row.instances { margin-bottom: 10px; }
+label.check { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0 0 10px; }
+label.check input { width: auto; margin: 0; accent-color: var(--ok); }
 
 input {
   background: #1e1e1e;

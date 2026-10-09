@@ -11,6 +11,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import {
   GetParams,
   InstanceInfo,
+  LAUNCHER_LABELS,
   Method,
   PackRow,
   MoveParams,
@@ -244,6 +245,8 @@ function MoveForm(props: {
   const { form, setForm, ready, busy, onStart, pickFolder, instances } = props;
   const can = ready && form.mods_dir.trim() !== "" && form.mc_version.trim() !== "";
   const picked = instances.find((i) => i.mods_dir === form.mods_dir) ?? null;
+  // only Prism instances can be created beside the old one for now (modkeel/newinstance.py)
+  const canAdd = picked?.launcher === "prism";
   const options = [
     { value: "", label: instances.length ? "Pick one, or a folder below" : "None found" },
     ...instances.map((i) => ({ value: i.mods_dir, label: i.name })),
@@ -270,6 +273,17 @@ function MoveForm(props: {
           {picked && <p className="detail instance-summary">{instanceSummary(picked)}</p>}
         </div>
       )}
+      {canAdd && (
+        <label className="check">
+          <input
+            type="checkbox"
+            name="new_instance"
+            checked={form.new_instance !== false}
+            onChange={(e) => setForm({ ...form, new_instance: e.target.checked })}
+          />
+          Add it to {LAUNCHER_LABELS.prism} as a new instance, next to this one
+        </label>
+      )}
       <form
         className="row"
         onSubmit={(e) => {
@@ -277,6 +291,7 @@ function MoveForm(props: {
           if (!can) return;
           const params: MoveParams = { mods_dir: form.mods_dir.trim(), mc_version: form.mc_version.trim() };
           if (form.loader) params.loader = form.loader;
+          if (canAdd && form.new_instance !== false) params.new_instance = true;
           onStart("move", params.mc_version, params);
         }}
       >
@@ -391,6 +406,13 @@ function PackList({ state }: { state: State }) {
           In <span className="mono">{r.output_dir}</span>
         </p>
       )}
+      {r?.instance && (
+        <p className="detail" data-testid="new-instance">
+          Added to {LAUNCHER_LABELS[r.instance.launcher] ?? r.instance.launcher}:{" "}
+          <strong>{r.instance.name}</strong>
+        </p>
+      )}
+      {r && !r.instance && r.instance_note && <p className="detail">No new instance: {r.instance_note}.</p>}
     </section>
   );
 }

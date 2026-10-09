@@ -71,6 +71,9 @@ export interface MoveResult {
     detail: string;
   }>;
   proposal: TargetOption | null;
+  /** The new launcher instance beside the old one (new_instance), or why none was made. */
+  instance?: InstanceInfo | null;
+  instance_note?: string;
 }
 
 export interface MoveParams {
@@ -78,6 +81,7 @@ export interface MoveParams {
   mc_version: string;
   loader?: string;
   output_dir?: string;
+  new_instance?: boolean; // also add the pack to its launcher (Prism) as a new instance
 }
 
 export type Method = "get" | "move";
