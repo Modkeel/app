@@ -50,7 +50,7 @@ export interface PackRow {
   file: string;
   name: string;
   slug: string | null;
-  identifiedBy: "hash" | "name" | null; // name: a guess the player may want to check
+  identifiedBy: "hash" | "launcher" | "name" | null; // name: a guess the player may want to check
   status: ModStatus;
   detail: string;
 }
@@ -64,7 +64,7 @@ export interface MoveResult {
   mods: Array<{
     file: string;
     name: string;
-    identified_by: "hash" | "name" | null;
+    identified_by: "hash" | "launcher" | "name" | null;
     slug: string | null;
     status: ModStatus;
     delivered: Delivery | null;
@@ -305,7 +305,7 @@ function onEvent(state: State, event: EngineEvent): State {
     case "pack_scanned":
       return {
         ...state,
-        pack: (event.mods as Array<[string, string, string | null, "hash" | "name" | null]>).map(
+        pack: (event.mods as Array<[string, string, string | null, "hash" | "launcher" | "name" | null]>).map(
           ([file, name, slug, identifiedBy]) => ({ file, name, slug, identifiedBy, status: "waiting", detail: "" }),
         ),
       };
