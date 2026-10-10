@@ -4,7 +4,8 @@
 //   node scripts/dev-bridge.mjs [port]      (default 8765; one engine per connection)
 //
 // MODKEEL_ENGINE overrides the command (default: python3 -m modkeel.cli serve --stdio, run
-// with the lab root on PYTHONPATH); MODKEEL_WORKDIR is where the engine writes out/.
+// with the parent folder on PYTHONPATH, for a checkout beside the CLI's source; else the
+// installed modkeel); MODKEEL_WORKDIR is where the engine writes out/.
 
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";

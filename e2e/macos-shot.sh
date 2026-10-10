@@ -1,7 +1,7 @@
 #!/bin/bash
 # Mount the .dmg, copy the app, open it, try to type a get (System Events needs an
 # accessibility permission the runner may not grant: then only the first shot shows), and
-# take screenshots: e2e/shots/macos-1-open.png, macos-2-get.png. For CI (app-release.yml).
+# take screenshots: e2e/shots/macos-1-open.png, macos-2-get.png. For CI.
 set -u
 dmg="$1"
 mkdir -p e2e/shots

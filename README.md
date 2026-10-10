@@ -4,6 +4,9 @@ Get Minecraft mods for the version you play. Modkeel finds a build of a mod that
 Minecraft version, checks it, and tells you how it knows. It can also move a whole pack (a
 mods folder or a launcher instance) to another Minecraft version.
 
+Open source (MIT): everything the app is made of is in this repository, and every release is
+built from it by GitHub Actions, where you can watch the build and check its result.
+
 **[Download the latest release](https://github.com/Modkeel/app/releases/latest)**
 
 | System | File |
@@ -28,9 +31,20 @@ The installers are not signed by Microsoft or Apple yet, so the system warns you
 
 ## Checking what you downloaded
 
-Each release lists `SHA256SUMS`. On Windows (PowerShell):
-`Get-FileHash .\Modkeel_<version>_windows_x64-setup.exe`; on macOS or Linux:
-`shasum -a 256 Modkeel_*`. The value must match the line for that file.
+Every file of a release is attested: GitHub records that it was built by this repository's
+release workflow from a specific commit, and signs that record. With the
+[GitHub CLI](https://cli.github.com):
+
+    gh attestation verify Modkeel_<version>_windows_x64-setup.exe -R Modkeel/app
+
+It answers with the commit and the workflow run that built the file. Without the GitHub CLI,
+compare the file's hash with its line in the release's `SHA256SUMS`: on Windows (PowerShell)
+`Get-FileHash .\Modkeel_<version>_windows_x64-setup.exe`, on macOS or Linux
+`shasum -a 256 Modkeel_*`.
+
+The engine inside the app is the [modkeel](https://pypi.org/project/modkeel/) command-line
+tool from PyPI ([source](https://github.com/Modkeel/modkeel)), at the version pinned in
+`engine/requirements.txt`.
 
 ## What it does on your computer
 
@@ -40,6 +54,11 @@ Each release lists `SHA256SUMS`. On Windows (PowerShell):
 - "Sign in with GitHub" is optional (it lets Modkeel search more community forks). It asks for
   no extra permissions: only what is public anyway.
 
+## Build it yourself
+
+[DEVELOPING.md](DEVELOPING.md): how the app is put together, its tests, and how to build the
+installers on your own machine.
+
 ## More
 
 - Command-line version: [Modkeel/modkeel](https://github.com/Modkeel/modkeel)
@@ -48,3 +67,7 @@ Each release lists `SHA256SUMS`. On Windows (PowerShell):
 - Website: [modkeel.com](https://modkeel.com)
 
 Problems or ideas: [open an issue](https://github.com/Modkeel/app/issues).
+
+## License
+
+[MIT](LICENSE).

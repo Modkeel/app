@@ -8,9 +8,10 @@ The real get asks for Accessories on 1.21.11, which has no build there: it exerc
 questions (token declined, the nearer version accepted), required dependencies, and the
 non-ASCII progress lines that broke the engine on Windows pipes (cp1252) before.
 
-Needs `pip install pyinstaller` and the lab's modkeel importable (run from the lab root or
-with `pip install .`). The binary only works on the system it was built on: CI builds one
-per OS (.github/workflows/app-release.yml).
+Needs PyInstaller and the engine: `pip install pyinstaller -r engine/requirements.txt` (the
+modkeel version releases bundle). Inside the Modkeel lab the CLI's source next to the app is
+used instead, so the app can be tried against unreleased engine changes. The binary only
+works on the system it was built on: release builds make one per OS.
 """
 from __future__ import annotations
 
@@ -24,6 +25,8 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parent.parent
 LAB = APP.parent
+# the CLI's source beside the app (the lab), else the installed modkeel package
+FROM_SOURCE = (LAB / "modkeel" / "cli.py").is_file()
 BINARIES = APP / "src-tauri" / "binaries"
 
 
@@ -40,8 +43,9 @@ def build() -> Path:
             [sys.executable, "-m", "PyInstaller", "--onefile", "--noconfirm", "--clean",
              "--name", "modkeel-engine", "--distpath", f"{tmp}/dist",
              "--workpath", f"{tmp}/build", "--specpath", tmp,
-             "--paths", str(LAB), str(APP / "engine" / "modkeel_engine.py")],
-            check=True, cwd=LAB)
+             *(["--paths", str(LAB)] if FROM_SOURCE else []),
+             str(APP / "engine" / "modkeel_engine.py")],
+            check=True, cwd=LAB if FROM_SOURCE else APP)
         BINARIES.mkdir(parents=True, exist_ok=True)
         dest = BINARIES / f"modkeel-engine-{target_triple()}{exe}"
         shutil.copy2(Path(tmp) / "dist" / f"modkeel-engine{exe}", dest)
@@ -51,7 +55,8 @@ def build() -> Path:
 
 def smoke(engine: Path, get: bool) -> None:
     """The bundled engine speaks the protocol (and, with get, resolves a real mod)."""
-    sys.path.insert(0, str(LAB))
+    if FROM_SOURCE:
+        sys.path.insert(0, str(LAB))
     from modkeel.constants import MODKEEL_VERSION
 
     with tempfile.TemporaryDirectory() as work:

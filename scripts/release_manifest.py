@@ -3,7 +3,7 @@
     python app/scripts/release_manifest.py <built-dir> <out-dir> --version 0.1.0 \
         --repo Modkeel/app --notes app/release-notes/0.1.0.md
 
-<built-dir> holds what the app-release jobs uploaded (any depth): the installers and, for the
+<built-dir> holds what the release build jobs uploaded (any depth): the installers and, for the
 updater, each platform's update bundle with its .sig (Tauri's updater signature, made with
 the TAURI_SIGNING_PRIVATE_KEY secret). Into <out-dir> go:
 

@@ -1,0 +1,3 @@
+# The engine the installers bundle: the modkeel CLI as published on PyPI, kept at its latest
+# version. A release builds with exactly this one.
+modkeel==0.1.7

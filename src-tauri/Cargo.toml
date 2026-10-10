@@ -1,8 +1,10 @@
 [package]
 name = "modkeel-app"
-version = "0.1.0"
+version = "0.1.1"
 description = "Modkeel desktop app: a window over the Modkeel engine (modkeel serve --stdio)"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/Modkeel/app"
 publish = false
 
 [lib]

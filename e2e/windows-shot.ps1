@@ -1,7 +1,7 @@
 # Install the NSIS build silently, open the app as a player would, type a get with the
 # keyboard (the two tabs, then the Mod field in tab order; Enter in the Minecraft field
 # submits), and take screenshots: e2e/shots/windows-1-open.png, windows-2-get.png. Fails when
-# the get left no JAR (the typing missed the form, or the get failed). For CI (app-release.yml).
+# the get left no JAR (the typing missed the form, or the get failed). For CI.
 param([string]$Installer)
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
