@@ -12,30 +12,40 @@ use std::thread;
 /// Which command runs the engine, first match wins:
 /// 1. `MODKEEL_ENGINE` (whitespace-separated), for development:
 ///    `python3 -m modkeel.cli serve --stdio`
-/// 2. an engine bundled next to the app's executable (`modkeel-engine[.exe]`, built with
-///    PyInstaller; packaging is the next step)
-/// 3. `modkeel serve --stdio` from PATH (a pipx/pip install of the CLI)
+/// 2. the embedded Python the Windows installer carries next to the app's executable
+///    (`engine/python.exe`: python.org's signed embeddable Python with modkeel installed in
+///    it, scripts/build_engine.py), run as `python.exe -X utf8 -B -m modkeel.cli serve --stdio`
+///    (UTF-8 pipes; no .pyc written into the install folder)
+/// 3. the one-file engine bundled next to the executable (`modkeel-engine`, PyInstaller; the
+///    macOS and Linux bundles)
+/// 4. `modkeel serve --stdio` from PATH (a pipx/pip install of the CLI)
 pub fn engine_command(env_override: Option<String>, exe_dir: Option<&Path>) -> Vec<String> {
     if let Some(cmd) = env_override.filter(|c| !c.trim().is_empty()) {
         return cmd.split_whitespace().map(String::from).collect();
     }
-    let bundled: Option<PathBuf> = exe_dir.map(|d| {
-        d.join(if cfg!(windows) {
+    let path = |p: PathBuf| p.to_string_lossy().into_owned();
+    if let Some(dir) = exe_dir {
+        let python = dir.join("engine").join(if cfg!(windows) {
+            "python.exe"
+        } else {
+            "python"
+        });
+        if python.is_file() {
+            let args = ["-X", "utf8", "-B", "-m", "modkeel.cli", "serve", "--stdio"];
+            return std::iter::once(path(python))
+                .chain(args.iter().map(|a| a.to_string()))
+                .collect();
+        }
+        let bundled = dir.join(if cfg!(windows) {
             "modkeel-engine.exe"
         } else {
             "modkeel-engine"
-        })
-    });
-    match bundled {
-        Some(path) if path.is_file() => {
-            vec![
-                path.to_string_lossy().into_owned(),
-                "serve".into(),
-                "--stdio".into(),
-            ]
+        });
+        if bundled.is_file() {
+            return vec![path(bundled), "serve".into(), "--stdio".into()];
         }
-        _ => vec!["modkeel".into(), "serve".into(), "--stdio".into()],
     }
+    vec!["modkeel".into(), "serve".into(), "--stdio".into()]
 }
 
 /// A running engine: write lines to it, kill it when the app closes.
@@ -185,6 +195,20 @@ mod tests {
         };
         std::fs::write(dir.join(name), b"").unwrap();
         assert!(engine_command(None, Some(&dir))[0].ends_with(name));
+        // the embedded Python wins over a one-file engine
+        let python = if cfg!(windows) {
+            "python.exe"
+        } else {
+            "python"
+        };
+        std::fs::create_dir_all(dir.join("engine")).unwrap();
+        std::fs::write(dir.join("engine").join(python), b"").unwrap();
+        let embedded = engine_command(None, Some(&dir));
+        assert!(embedded[0].ends_with(python));
+        assert_eq!(
+            embedded[1..],
+            ["-X", "utf8", "-B", "-m", "modkeel.cli", "serve", "--stdio"]
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

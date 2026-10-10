@@ -16,7 +16,9 @@ src/                React + Vite screen
 src-tauri/          Tauri 2 (Rust): starts the engine, relays lines both ways, kills it on exit
   src/engine.rs     the child process (no Tauri inside, unit-tested with sh)
 engine/             the bundled engine: the modkeel CLI from PyPI, pinned in requirements.txt
-scripts/build_engine.py   the engine as one executable (PyInstaller) + a smoke test
+scripts/build_engine.py   the engine for this OS + a smoke test: on Windows python.org's
+                    embeddable Python with modkeel in it (src-tauri/binaries/python, bundled
+                    as engine/ by tauri.windows.conf.json); elsewhere one PyInstaller executable
 scripts/release_manifest.py   a release's files: installers, latest.json, SHA256SUMS
 scripts/dev-bridge.mjs   WebSocket <-> `modkeel serve --stdio`, for the browser and the e2e
 e2e/get.mjs, move.mjs  Chromium + dev bridge + the real engine: a full get / a pack moved
@@ -26,7 +28,8 @@ release-notes/      notes per release (the release page and the in-app update ca
 ```
 
 Which engine runs: `MODKEEL_ENGINE` (e.g. `python3 -m modkeel.cli serve --stdio`), else the
-`modkeel-engine` bundled next to the executable (the installers carry it), else
+embedded `engine/python.exe` next to the executable (the Windows installer), else the
+`modkeel-engine` bundled next to it (macOS, Linux), else
 `modkeel serve --stdio` from PATH (`pipx install modkeel`). The engine runs in, and writes
 to, `Downloads/Modkeel` (home/Modkeel without a Downloads folder), never beside the app.
 
@@ -40,8 +43,8 @@ npm run build                  # typecheck + bundle
 npm run e2e                    # real get through the screen (network; Chromium)
 
 # the engine the installers carry, built for this OS and smoke-tested
-pip install pyinstaller -r engine/requirements.txt
-python scripts/build_engine.py --get
+pip install -r engine/requirements.txt   # + pyinstaller on macOS and Linux
+python scripts/build_engine.py --get     # on Windows, run it with Python 3.12
 
 # the app itself (Linux needs libwebkit2gtk-4.1-dev; Windows/macOS ship their webview)
 npx tauri dev

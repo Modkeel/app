@@ -15,8 +15,9 @@ RESCAN_WAIT; a file still queued then gets its latest report. Progress goes to s
 Run by release.yml after each release with the VIRUSTOTAL_API_KEY secret (a free account's key
 works; it is never printed). Whatever the result, it is published: the release notes link each
 file's report, so players can read what every engine said, including a false positive.
-Installers that bundle a Python program (the engine, built with PyInstaller) are often flagged
-by one or two engines for that reason alone; the report names which.
+One-file Python programs (PyInstaller) in unsigned installers are often flagged by a few
+generic or machine-learning engines for that reason alone, which is why the Windows installer
+carries python.org's signed embeddable Python instead; the table names any engine that flags.
 
 Needs `requests` and, for `release`, the GitHub CLI with a token that can edit releases.
 """

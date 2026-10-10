@@ -5,8 +5,9 @@
 #
 # Every push to main and every pull request builds Windows (NSIS), macOS (Apple Silicon) and
 # Linux (AppImage, deb), each with the engine from PyPI at the version engine/requirements.txt
-# pins (smoke-tested with a real get before it is bundled): the installers are the run's
-# artifacts, unsigned. A tag v<version> also signs the update bundles with the updater key,
+# pins (smoke-tested with a real get before it is bundled; on Windows inside python.org's
+# embeddable Python, scripts/build_engine.py): the installers are the run's artifacts,
+# unsigned. A tag v<version> also signs the update bundles with the updater key,
 # writes latest.json for the installed apps' updater and SHA256SUMS
 # (scripts/release_manifest.py), attests every file (build provenance), publishes the release
 # with release-notes/<version>.md, then adds each file's VirusTotal report to its notes
@@ -89,9 +90,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Engine from PyPI (PyInstaller) + smoke test with a real get
+      # Windows: python.org's signed embeddable Python with modkeel in it (no executable of
+      # ours); macOS and Linux: one PyInstaller executable. Both smoke-tested with a real get.
+      - name: Engine from PyPI + smoke test with a real get
+        shell: bash
         run: |
-          pip install pyinstaller -r engine/requirements.txt
+          pip install -r engine/requirements.txt
+          if [ "$RUNNER_OS" != "Windows" ]; then pip install pyinstaller; fi
           python scripts/build_engine.py --get
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0

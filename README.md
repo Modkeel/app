@@ -56,7 +56,9 @@ Every installer is built by GitHub Actions from this repository's code
 
 The engine inside the app is the [modkeel](https://pypi.org/project/modkeel/) command-line
 tool from PyPI ([source](https://github.com/Modkeel/modkeel)), at the version pinned in
-`engine/requirements.txt`.
+`engine/requirements.txt`. On Windows it runs inside python.org's official embeddable Python
+(its `python.exe` and DLLs are signed by the Python Software Foundation), installed in the
+app's `engine` folder; on macOS and Linux it is one executable built with PyInstaller.
 
 ## What it does on your computer
 
