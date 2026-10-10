@@ -1,25 +1,34 @@
-# Builds the installers from this repo's code on GitHub's machines and publishes them, so anyone
-# can check that a file on the Releases page came from the tagged commit:
+# Builds the installers from this repo's code on GitHub's machines, for every change and every
+# release, so anyone can check that a file on the Releases page came from the tagged commit:
 #
 #   gh attestation verify Modkeel_<version>_windows_x64-setup.exe -R Modkeel/app
 #
-# A tag v<version> builds Windows (NSIS), macOS (Apple Silicon) and Linux (AppImage, deb), each
-# with the engine from PyPI at the version engine/requirements.txt pins (smoke-tested with a real
-# get before it is bundled); signs the update bundles with the updater key; writes latest.json
-# for the installed apps' updater and SHA256SUMS (scripts/release_manifest.py); attests every
-# file (build provenance) and publishes the release with release-notes/<version>.md.
-# Run it by hand (Actions > Release > Run workflow) for installers without a release.
+# Every push to main and every pull request builds Windows (NSIS), macOS (Apple Silicon) and
+# Linux (AppImage, deb), each with the engine from PyPI at the version engine/requirements.txt
+# pins (smoke-tested with a real get before it is bundled): the installers are the run's
+# artifacts, unsigned. A tag v<version> also signs the update bundles with the updater key,
+# writes latest.json for the installed apps' updater and SHA256SUMS
+# (scripts/release_manifest.py), attests every file (build provenance), publishes the release
+# with release-notes/<version>.md, then adds each file's VirusTotal report to its notes.
 #
-# Secrets: TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD, the updater key
-# whose public half is in src-tauri/tauri.conf.json. Only tag builds see them.
+# Secrets (only tag builds see them): TAURI_SIGNING_PRIVATE_KEY and
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD, the updater key whose public half is in
+# src-tauri/tauri.conf.json; VIRUSTOTAL_API_KEY for the scans (without it they are skipped).
 name: Release
 
 on:
   push:
+    branches: [main]
     tags: ["v*"]
+  pull_request:
   workflow_dispatch:
 
 permissions: {}
+
+# a newer push to a branch or pull request replaces its older build; a release is never cut off
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   # A tag that does not match the version, or a release without notes, stops here.
@@ -41,7 +50,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           [ "$(jq -r .version src-tauri/tauri.conf.json)" = "$version" ] \
             || { echo "::error::package.json and tauri.conf.json versions differ"; exit 1; }
-          [ "$GITHUB_EVENT_NAME" = "push" ] || exit 0
+          [ "$GITHUB_REF_TYPE" = "tag" ] || exit 0
           [ "$TAG" = "v$version" ] || { echo "::error::tag $TAG but the app is $version"; exit 1; }
           [ -n "$(jq -r '.plugins.updater.pubkey // empty' src-tauri/tauri.conf.json)" ] \
             || { echo "::error::no updater public key in tauri.conf.json"; exit 1; }
@@ -93,11 +102,11 @@ jobs:
       - name: Installers
         shell: bash
         env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ github.event_name == 'push' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.event_name == 'push' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ github.ref_type == 'tag' && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ github.ref_type == 'tag' && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
         run: |
           npm ci
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
             [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] || { echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is missing"; exit 1; }
             npx tauri build --bundles ${{ matrix.bundles }} \
               --config '{"bundle":{"createUpdaterArtifacts":true}}'
@@ -109,7 +118,7 @@ jobs:
         with:
           name: modkeel-app-${{ runner.os }}
           if-no-files-found: error
-          retention-days: 14
+          retention-days: ${{ github.ref_type == 'tag' && 90 || 14 }}
           path: |
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/nsis/*.exe.sig
@@ -122,7 +131,7 @@ jobs:
 
   release:
     needs: [preflight, build]
-    if: github.event_name == 'push'
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-24.04
     permissions:
       contents: write       # create the release
@@ -151,3 +160,49 @@ jobs:
         run: |
           gh release create "$TAG" --verify-tag -R "$GITHUB_REPOSITORY" \
             --title "Modkeel $VERSION" --notes-file "release-notes/$VERSION.md" release/*
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: release-files
+          path: release/
+          retention-days: 90
+
+  # Separate from the release, so a slow or failed scan never holds the release back; its
+  # table lands at the end of the notes, whatever it says.
+  virustotal:
+    needs: release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: write       # edit the release notes
+    env:
+      VIRUSTOTAL_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - name: Key
+        id: key
+        run: |
+          if [ -z "$VIRUSTOTAL_API_KEY" ]; then
+            echo "::notice::VIRUSTOTAL_API_KEY is not set: no virus scans for this release."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        if: steps.key.outputs.ready == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        if: steps.key.outputs.ready == 'true'
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
+        if: steps.key.outputs.ready == 'true'
+        with:
+          name: release-files
+          path: release
+      - name: Scan and add the reports to the release notes
+        if: steps.key.outputs.ready == 'true'
+        run: |
+          pip install requests==2.32.3
+          python scripts/virustotal.py release "$TAG" release

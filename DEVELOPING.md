@@ -53,13 +53,18 @@ another, then open http://localhost:1420.
 
 ## Releases
 
-Every release is built from this repository's code on GitHub's machines
-(`.github/workflows/release.yml`), for Windows (NSIS .exe), macOS (Apple Silicon .dmg) and
-Linux (.AppImage, .deb), with the engine from PyPI at the version `engine/requirements.txt`
-pins. Each file on the release page carries a build provenance attestation, so anyone can
-check it came from the tagged commit:
+`.github/workflows/release.yml` builds the installers on GitHub's machines for Windows (NSIS
+.exe), macOS (Apple Silicon .dmg) and Linux (.AppImage, .deb), with the engine from PyPI at the
+version `engine/requirements.txt` pins: on every push to main and every pull request (unsigned,
+as the run's artifacts) and on every `v<version>` tag, which publishes the release. Each file on
+the release page carries a build provenance attestation, so anyone can check it came from the
+tagged commit, and the release notes link each file's VirusTotal report
+(`scripts/virustotal.py`, secret `VIRUSTOTAL_API_KEY`):
 
     gh attestation verify Modkeel_<version>_windows_x64-setup.exe -R Modkeel/app
+
+`codeql.yml` scans the code on every push and weekly; `scorecard.yml` publishes the OpenSSF
+Scorecard. Security reports: [SECURITY.md](SECURITY.md).
 
 Updates are signed with the app's updater key (Tauri's minisign key, unrelated to OS code
 signing). Its public half is `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`; a build

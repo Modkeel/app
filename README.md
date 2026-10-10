@@ -4,8 +4,9 @@ Get Minecraft mods for the version you play. Modkeel finds a build of a mod that
 Minecraft version, checks it, and tells you how it knows. It can also move a whole pack (a
 mods folder or a launcher instance) to another Minecraft version.
 
-Open source (MIT): everything the app is made of is in this repository, and every release is
-built from it by GitHub Actions, where you can watch the build and check its result.
+Open source (MIT): everything the app is made of is in this repository, with its whole history,
+and every release is built from it by GitHub Actions, where you can watch the build and check
+its result. See [how to check a download](#checking-what-you-downloaded).
 
 **[Download the latest release](https://github.com/Modkeel/app/releases/latest)**
 
@@ -31,16 +32,25 @@ The installers are not signed by Microsoft or Apple yet, so the system warns you
 
 ## Checking what you downloaded
 
-Every file of a release is attested: GitHub records that it was built by this repository's
-release workflow from a specific commit, and signs that record. With the
-[GitHub CLI](https://cli.github.com):
+Every installer is built by GitHub Actions from this repository's code
+([release.yml](.github/workflows/release.yml)), never on someone's computer. Ways to check one:
 
-    gh attestation verify Modkeel_<version>_windows_x64-setup.exe -R Modkeel/app
-
-It answers with the commit and the workflow run that built the file. Without the GitHub CLI,
-compare the file's hash with its line in the release's `SHA256SUMS`: on Windows (PowerShell)
-`Get-FileHash .\Modkeel_<version>_windows_x64-setup.exe`, on macOS or Linux
-`shasum -a 256 Modkeel_*`.
+1. **Provenance.** GitHub signs a record of which workflow, commit and tag built each file.
+   With the [GitHub CLI](https://cli.github.com):
+   ```
+   gh attestation verify Modkeel_<version>_windows_x64-setup.exe -R Modkeel/app
+   ```
+   It answers with the commit and the workflow run; the run's log shows every build step.
+2. **Checksum.** Compare the file's hash with its line in the release's `SHA256SUMS`: on
+   Windows (PowerShell) `Get-FileHash .\Modkeel_<version>_windows_x64-setup.exe`, on macOS or
+   Linux `shasum -a 256 Modkeel_*`.
+3. **Virus scans.** Each release's notes link the VirusTotal report of every file, whatever it
+   says. One or two engines sometimes flag apps that bundle a Python program (the engine is
+   one); the report names which engine and why.
+4. **The code and its history.** Every change is a public, signed commit here, and every one is
+   built for Windows, macOS and Linux as it lands (Actions, "Release" runs). Code scanning
+   (CodeQL) and the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/Modkeel/app)
+   check the code and how the repository is run.
 
 The engine inside the app is the [modkeel](https://pypi.org/project/modkeel/) command-line
 tool from PyPI ([source](https://github.com/Modkeel/modkeel)), at the version pinned in
@@ -58,6 +68,8 @@ tool from PyPI ([source](https://github.com/Modkeel/modkeel)), at the version pi
 
 [DEVELOPING.md](DEVELOPING.md): how the app is put together, its tests, and how to build the
 installers on your own machine.
+
+Found a security problem? See [SECURITY.md](SECURITY.md).
 
 ## More
 
