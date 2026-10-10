@@ -44,9 +44,11 @@ Every installer is built by GitHub Actions from this repository's code
 2. **Checksum.** Compare the file's hash with its line in the release's `SHA256SUMS`: on
    Windows (PowerShell) `Get-FileHash .\Modkeel_<version>_windows_x64-setup.exe`, on macOS or
    Linux `shasum -a 256 Modkeel_*`.
-3. **Virus scans.** Each release's notes link the VirusTotal report of every file, whatever it
-   says. One or two engines sometimes flag apps that bundle a Python program (the engine is
-   one); the report names which engine and why.
+3. **Virus scans.** Each release's notes show, for every file, how many VirusTotal engines
+   flagged it, which ones and what they called it, with a link to the full report, whatever it
+   says. Every release is scanned again each week, so the table follows the engines' updates.
+   The goal is zero on every file; a flag is investigated and, when it is a false positive,
+   reported to that vendor.
 4. **The code and its history.** Every change is a public, signed commit here, and every one is
    built for Windows, macOS and Linux as it lands (Actions, "Release" runs). Code scanning
    (CodeQL) and the [OpenSSF Scorecard](https://scorecard.dev/viewer/?uri=github.com/Modkeel/app)

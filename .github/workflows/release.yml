@@ -9,7 +9,8 @@
 # artifacts, unsigned. A tag v<version> also signs the update bundles with the updater key,
 # writes latest.json for the installed apps' updater and SHA256SUMS
 # (scripts/release_manifest.py), attests every file (build provenance), publishes the release
-# with release-notes/<version>.md, then adds each file's VirusTotal report to its notes.
+# with release-notes/<version>.md, then adds each file's VirusTotal report to its notes
+# (which engines flagged it and as what; virus-scan.yml rescans weekly).
 #
 # Secrets (only tag builds see them): TAURI_SIGNING_PRIVATE_KEY and
 # TAURI_SIGNING_PRIVATE_KEY_PASSWORD, the updater key whose public half is in
@@ -205,4 +206,9 @@ jobs:
         if: steps.key.outputs.ready == 'true'
         run: |
           pip install requests==2.32.3
-          python scripts/virustotal.py release "$TAG" release
+          python scripts/virustotal.py release "$TAG" release | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        if: steps.key.outputs.ready == 'true'
+        with:
+          name: virustotal
+          path: release/virustotal.json
