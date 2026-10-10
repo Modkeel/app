@@ -86,7 +86,14 @@ def wait_for(analysis: str, name: str, deadline: float | None = None) -> dict | 
     deadline = deadline or time.time() + WAIT
     while True:
         time.sleep(PAUSE)
-        a = call("GET", f"/analyses/{analysis}").json()["data"]["attributes"]
+        r = call("GET", f"/analyses/{analysis}")
+        a = r.json().get("data", {}).get("attributes") if r.ok else None
+        if a is None:
+            # an API error (quota, unknown analysis): a rescan falls back to the last report
+            if hard:
+                sys.exit(f"{name}: analysis {analysis}: {r.status_code} {r.text[:300]}")
+            log(f"{name}: rescan status unavailable ({r.status_code} {r.text[:200]})")
+            return None
         if a["status"] == "completed":
             return a
         if time.time() > deadline:

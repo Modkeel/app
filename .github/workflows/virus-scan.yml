@@ -53,6 +53,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Rescan and update the release notes
+        shell: bash   # pipefail: a failed scan fails the step despite tee
         if: steps.key.outputs.ready == 'true'
         env:
           RELEASE: ${{ steps.key.outputs.tag }}

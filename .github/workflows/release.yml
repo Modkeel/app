@@ -203,6 +203,7 @@ jobs:
           name: release-files
           path: release
       - name: Scan and add the reports to the release notes
+        shell: bash   # pipefail: a failed scan fails the step despite tee
         if: steps.key.outputs.ready == 'true'
         run: |
           pip install requests==2.32.3
