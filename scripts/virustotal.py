@@ -8,7 +8,9 @@
 The notes name every engine that flagged a file and what it called it, so anyone can see a
 detection without a VirusTotal account; virustotal.json (written next to the files) holds the
 same per file. --rescan asks VirusTotal to analyse known files again: after a vendor fixes a
-false positive, the table follows (virus-scan.yml runs it weekly on the latest release).
+false positive, the table follows (virus-scan.yml runs it weekly on the latest release). A free
+key's rescans queue at low priority, so they are all requested at once and waited for at most
+RESCAN_WAIT; a file still queued then gets its latest report. Progress goes to stderr.
 
 Run by release.yml after each release with the VIRUSTOTAL_API_KEY secret (a free account's key
 works; it is never printed). Whatever the result, it is published: the release notes link each
@@ -37,7 +39,8 @@ GUI = "https://www.virustotal.com/gui/file"
 HEADING = "## Virus scans"
 PAUSE = 16                       # the free API allows 4 requests a minute
 DIRECT_UPLOAD = 32 * 1024 * 1024  # bigger files go through an upload URL
-WAIT = 30 * 60                   # a big file's analysis can take a while
+WAIT = 30 * 60                   # a new file's analysis can take a while
+RESCAN_WAIT = 10 * 60            # free keys' rescans queue at low priority: then the last report
 
 
 def key() -> str:
@@ -71,48 +74,84 @@ def upload(path: Path) -> str:
     return r.json()["data"]["id"]
 
 
-def wait_for(analysis: str, name: str) -> dict:
-    """The results of a queued analysis, once every engine has answered."""
-    deadline = time.time() + WAIT
+def log(message: str) -> None:
+    """Progress on stderr, so a long run shows where it is (stdout is the table)."""
+    print(message, file=sys.stderr, flush=True)
+
+
+def wait_for(analysis: str, name: str, deadline: float | None = None) -> dict | None:
+    """The results of a queued analysis once every engine has answered; None when `deadline`
+    (a time.time()) passes first. Without a deadline, waits up to WAIT and then gives up."""
+    hard = deadline is None
+    deadline = deadline or time.time() + WAIT
     while True:
         time.sleep(PAUSE)
         a = call("GET", f"/analyses/{analysis}").json()["data"]["attributes"]
         if a["status"] == "completed":
             return a
         if time.time() > deadline:
-            sys.exit(f"{name}: analysis not finished after {WAIT // 60} minutes")
+            if hard:
+                sys.exit(f"{name}: analysis not finished after {WAIT // 60} minutes")
+            return None
 
 
-def scan(path: Path, rescan: bool = False) -> dict:
-    """The finished VirusTotal analysis of `path`: engine counts, which engines flagged it and
-    as what, and the report link. A file VirusTotal already knows is analysed again first
-    with `rescan` (engines update their signatures; a fixed false positive shows here)."""
-    sha = hashlib.sha256(path.read_bytes()).hexdigest()
-    r = call("GET", f"/files/{sha}")
-    if r.status_code == 404:
-        a = wait_for(upload(path), path.name)
-        stats, results = a["stats"], a.get("results", {})
-    elif r.status_code >= 400:
-        sys.exit(f"lookup {path.name}: {r.status_code} {r.text[:300]}")
-    elif rescan:
-        time.sleep(PAUSE)
-        again = call("POST", f"/files/{sha}/analyse")
-        if again.status_code >= 400:
-            sys.exit(f"rescan {path.name}: {again.status_code} {again.text[:300]}")
-        a = wait_for(again.json()["data"]["id"], path.name)
-        stats, results = a["stats"], a.get("results", {})
-    else:
-        attributes = r.json()["data"]["attributes"]
-        stats, results = attributes["last_analysis_stats"], attributes["last_analysis_results"]
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def request_rescan(path: Path) -> str | None:
+    """Ask every engine to analyse a file VirusTotal knows again; the analysis id, or None
+    when it does not know the file yet (scan uploads it then)."""
+    r = call("POST", f"/files/{sha256(path)}/analyse")
     time.sleep(PAUSE)
+    if r.status_code == 404:
+        return None
+    if r.status_code >= 400:
+        sys.exit(f"rescan {path.name}: {r.status_code} {r.text[:300]}")
+    log(f"{path.name}: rescan requested")
+    return r.json()["data"]["id"]
+
+
+def scan(path: Path, analysis: str | None = None, deadline: float | None = None) -> dict:
+    """The VirusTotal verdict on `path`: engine counts, which engines flagged it and as what,
+    and the report link. A file VirusTotal has never seen is uploaded and waited for. With
+    `analysis` (a requested rescan), its results once finished; if it is still queued at
+    `deadline`, the file's latest report instead (the rescan updates it when it finishes)."""
+    sha = sha256(path)
+    a = wait_for(analysis, path.name, deadline) if analysis else None
+    if a is None:
+        r = call("GET", f"/files/{sha}")
+        if r.status_code == 404:
+            log(f"{path.name}: new to VirusTotal, uploading")
+            a = wait_for(upload(path), path.name)
+        elif r.status_code >= 400:
+            sys.exit(f"lookup {path.name}: {r.status_code} {r.text[:300]}")
+        else:
+            if analysis:
+                log(f"{path.name}: rescan still queued, using the latest report")
+            attributes = r.json()["data"]["attributes"]
+            a = {"stats": attributes["last_analysis_stats"],
+                 "results": attributes["last_analysis_results"]}
+    time.sleep(PAUSE)
+    stats, results = a["stats"], a.get("results", {})
     flagged_by = sorted(
         (engine, res.get("result") or res["category"]) for engine, res in results.items()
         if res.get("category") in ("malicious", "suspicious"))
+    flagged = stats.get("malicious", 0) + stats.get("suspicious", 0)
+    log(f"{path.name}: {flagged} flagged" + "".join(f"; {e}: {label}" for e, label in flagged_by))
     return {"name": path.name, "sha256": sha, "link": f"{GUI}/{sha}",
-            "flagged": stats.get("malicious", 0) + stats.get("suspicious", 0),
+            "flagged": flagged,
             "engines": sum(stats.get(k, 0) for k in
                            ("malicious", "suspicious", "undetected", "harmless")),
             "flagged_by": [{"engine": e, "label": label} for e, label in flagged_by]}
+
+
+def scan_all(paths: list[Path], rescan: bool = False) -> list[dict]:
+    """Every file's verdict. With `rescan`, all rescans are requested first and then waited
+    for together, at most RESCAN_WAIT in all (one slow queue never holds the others)."""
+    analyses = {p: request_rescan(p) for p in paths} if rescan else {}
+    deadline = time.time() + RESCAN_WAIT
+    return [scan(p, analyses.get(p), deadline) for p in paths]
 
 
 def table(results: list[dict]) -> str:
@@ -143,7 +182,7 @@ def release(tag: str, folder: Path | None, repo: str, rescan: bool = False) -> N
         folder = Path(tempfile.mkdtemp())
         subprocess.run(["gh", "release", "download", tag, "-R", repo, "-D", str(folder)],
                        check=True)
-    results = [scan(p, rescan) for p in scannable(folder)]
+    results = scan_all(scannable(folder), rescan)
     (folder / "virustotal.json").write_text(json.dumps(results, indent=2) + "\n",
                                             encoding="utf-8")
     body = json.loads(subprocess.run(["gh", "release", "view", tag, "-R", repo, "--json",
@@ -173,7 +212,7 @@ def main() -> None:
                    help="ask VirusTotal to analyse files it already knows again")
     args = ap.parse_args()
     if args.cmd == "scan":
-        print(table([scan(p) for p in args.files]))
+        print(table(scan_all(args.files)))
     else:
         release(args.tag, args.folder, args.repo, args.rescan)
 
