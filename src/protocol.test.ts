@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   ServerMessage,
   State,
+  activityLine,
   answered,
   shortDetail,
   initialState,
@@ -129,5 +130,30 @@ describe("shortDetail", () => {
       "needs a GitHub token: modkeel token --set ghp_YOUR_TOKEN",
     );
     expect(shortDetail("calls Foo.bar(int) at runtime")).toBe("calls Foo.bar(int) at runtime");
+  });
+});
+
+describe("activity line", () => {
+  it("is the engine's progress line without its icon and indentation", () => {
+    expect(activityLine("    \u{1f528} Compiling...")).toBe("Compiling...");
+    expect(activityLine("\n  ✅ SUCCESS: voxy v2.20.0+mia from branch 'mc_26_3'")).toBe(
+      "SUCCESS: voxy v2.20.0+mia from branch 'mc_26_3'",
+    );
+    expect(activityLine("=".repeat(80))).toBeNull();
+    expect(activityLine("")).toBeNull();
+  });
+
+  it("follows the run's messages and keeps the last one through a rule", () => {
+    let state = started(initialState, "1", "26.3");
+    const on = (id: string, event: Record<string, unknown>) =>
+      (state = reduce(state, { type: "event", id, event: event as { kind: string } }));
+    on("1", { kind: "message", text: "    \u{1f50d} Checking dependencies..." });
+    expect(state.activity).toBe("Checking dependencies...");
+    on("1", { kind: "message", text: "=".repeat(80) });
+    expect(state.activity).toBe("Checking dependencies...");
+    on("1", { kind: "fork_chosen", label: "MineInAbyss/voxy (mc_26_3)" });
+    expect(state.activity).toBe("Building MineInAbyss/voxy (mc_26_3)");
+    on("2", { kind: "message", text: "Another run" });
+    expect(state.activity).toBe("Building MineInAbyss/voxy (mc_26_3)");
   });
 });

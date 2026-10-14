@@ -359,9 +359,25 @@ function onEvent(state: State, event: EngineEvent): State {
       };
       return { ...state, activity: null, pack: state.pack.map((r, j) => (j === i ? row : r)) };
     }
+    case "message": {
+      const line = activityLine(String(event.text));
+      return line ? { ...state, activity: line } : state;
+    }
+    case "fork_chosen":
+      return { ...state, activity: `Building ${event.label}` };
     default:
-      return state; // messages, progress...: not shown in this spike
+      return state; // progress, checks...: not shown yet
   }
+}
+
+/**
+ * A terminal progress line as the activity line: "    🔨 Compiling..." -> "Compiling...".
+ * Its last line with words, without the leading icon and indentation; rules ("=====") give
+ * nothing, so the line before them stays.
+ */
+export function activityLine(text: string): string | null {
+  const lines = text.split("\n").map((l) => l.replace(/^[^\p{L}\p{N}]+/u, "").trim());
+  return lines.filter((l) => /\p{L}/u.test(l)).at(-1) ?? null;
 }
 
 // After a change_target answer the next steps belong to the proposed version.
