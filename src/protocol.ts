@@ -106,7 +106,16 @@ export const SIGN_IN_ANSWER = { sign_in: true, open_browser: true };
 
 /** One launcher instance (modkeel/instances.py), from the engine's `instances` query. */
 export interface InstanceInfo {
-  launcher: "prism" | "modrinth" | "curseforge" | "minecraft" | "sklauncher";
+  launcher:
+    | "prism"
+    | "polymc"
+    | "modrinth"
+    | "curseforge"
+    | "atlauncher"
+    | "gdlauncher"
+    | "ftb"
+    | "minecraft"
+    | "sklauncher";
   name: string;
   path: string;
   mods_dir: string;
@@ -118,8 +127,12 @@ export interface InstanceInfo {
 
 export const LAUNCHER_LABELS: Record<InstanceInfo["launcher"], string> = {
   prism: "Prism Launcher",
+  polymc: "PolyMC",
   modrinth: "Modrinth App",
   curseforge: "CurseForge",
+  atlauncher: "ATLauncher",
+  gdlauncher: "GDLauncher",
+  ftb: "FTB App",
   minecraft: "Minecraft Launcher",
   sklauncher: "SKlauncher",
 };
