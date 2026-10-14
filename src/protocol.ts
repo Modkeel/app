@@ -106,7 +106,7 @@ export const SIGN_IN_ANSWER = { sign_in: true, open_browser: true };
 
 /** One launcher instance (modkeel/instances.py), from the engine's `instances` query. */
 export interface InstanceInfo {
-  launcher: "prism" | "modrinth" | "curseforge" | "minecraft";
+  launcher: "prism" | "modrinth" | "curseforge" | "minecraft" | "sklauncher";
   name: string;
   path: string;
   mods_dir: string;
@@ -121,6 +121,7 @@ export const LAUNCHER_LABELS: Record<InstanceInfo["launcher"], string> = {
   modrinth: "Modrinth App",
   curseforge: "CurseForge",
   minecraft: "Minecraft Launcher",
+  sklauncher: "SKlauncher",
 };
 
 /** "1.21.1 · NeoForge · 84 mods · Prism Launcher": what an instance runs, in one line. */
