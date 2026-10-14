@@ -28,6 +28,7 @@ try {
   await page.goto("http://127.0.0.1:4799/?bridge=8799");
   await page.getByText(/engine \d/).waitFor({ timeout: 20000 });
   await page.screenshot({ path: shots + "1-ready.png" });
+  await page.getByRole("tab", { name: "Get a mod" }).click();
 
   await page.fill("input[name=query]", "Accessories");
   await page.fill("input[name=mc_version]", "1.21.11");

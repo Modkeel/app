@@ -136,6 +136,7 @@ pub fn run() {
     let context = tauri::generate_context!();
     let mut builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init()) // the pack's mods folder picker
+        .plugin(tauri_plugin_opener::init()) // a mod's page in the browser (http/https only)
         .plugin(tauri_plugin_process::init()); // restart into an installed update
     if has_updater(&context.config().plugins) {
         builder = builder.plugin(tauri_plugin_updater::Builder::new().build());

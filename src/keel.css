@@ -3,6 +3,16 @@
    order (one card per item, the key fact as its title, pills beside it). Mid-gray, never
    near-black; every zone has a pattern and neighbours never share one; cards are plain. */
 
+/* Bricolage Grotesque (OFL, assets/fonts/OFL.txt): Latin subset of the variable font;
+   ✓ and ✗ are not in it and fall back */
+@font-face {
+  font-family: "Bricolage Grotesque";
+  src: url("./assets/fonts/BricolageGrotesque.woff2") format("woff2");
+  font-weight: 200 800;
+  font-stretch: 75% 100%;
+  font-display: swap;
+}
+
 :root {
   --screen: #6b6b6b;
   --panel: #575757;
@@ -21,7 +31,7 @@
   --bad: #d04a3c;
   --edge-light: rgba(255, 255, 255, 0.18);
   --edge-dark: rgba(0, 0, 0, 0.45);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-family: "Bricolage Grotesque", "Segoe UI", sans-serif;
   font-size: 14px;
   color: var(--text);
 }
@@ -217,3 +227,21 @@ button.primary {
 .steps .mark.wait { color: var(--detail); }
 .steps .mark.warn { color: var(--warn); }
 .pill.guess { margin-left: 6px; color: var(--act); }
+
+/* home: one card per instance */
+.pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+
+/* Add a mod: one row per search hit, told apart by icon, author and downloads */
+.hits { display: flex; flex-direction: column; gap: 10px; }
+.hit { display: flex; gap: 10px; align-items: flex-start; }
+.hit + .hit { border-top: 1px solid var(--edge-dark); padding-top: 10px; }
+.hit .icon { width: 40px; height: 40px; flex: none; background: var(--pill); border: 1px solid #000; }
+.hit-text { flex: 1; min-width: 0; }
+.hit-title { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.hit-title .by { color: var(--detail); font-size: 12px; }
+.hit .status { font-size: 12px; margin-top: 2px; }
+.hit .status.official { color: var(--ok); }
+.hit .status.other_versions { color: var(--warn); }
+.hit .status.other_loader { color: var(--bad); }
+.hit-desc { color: var(--detail); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hit-actions { display: flex; gap: 6px; flex: none; }

@@ -1,15 +1,20 @@
-// The app's screen: two jobs in tabs, one engine.
+// The app's screen: the player's instances first, one engine.
 //
-//   Get a mod     one mod for a Minecraft version (engine method `get`)
-//   Move a pack   a mods folder moved to another Minecraft version (method `move`); the
-//                 player's launcher instances are offered first (query `instances`)
+//   Instances     the launcher instances (query `instances`); each one: Add a mod (method
+//                 `search`, then `add` into its mods folder, with undo) or Move it
+//   Get a mod     one mod for a Minecraft version into a folder (method `get`)
+//   Move a pack   a mods folder moved to another Minecraft version (method `move`)
+//   History       what Modkeel added to which instance (query `history`), each with Undo
 //
 // All state comes from protocol.reduce; this file only renders it and turns clicks into
 // protocol messages. Questions (token, version change) are the same cards for both jobs.
 
 import { useEffect, useReducer, useRef, useState } from "react";
 import {
+  AddParams,
+  AddResult,
   GetParams,
+  InstallRecord,
   InstanceInfo,
   LAUNCHER_LABELS,
   Method,
@@ -18,18 +23,24 @@ import {
   SIGN_IN_ANSWER,
   SignInParams,
   QuestionPayload,
+  SearchHit,
+  SearchResult,
   ServerMessage,
   State,
   answer,
   answered,
+  compactCount,
+  hitStatusLabel,
   initialState,
   instanceSummary,
+  loaderLabel,
   query,
   reduce,
   request,
   started,
   shortDetail,
   strategyLabel,
+  UndoResult,
 } from "./protocol";
 import logo from "./assets/logo.png";
 import Select from "./components/Select";
@@ -65,6 +76,27 @@ const LOADERS = [
 // The ids of the queries: requests count from 1, so they never meet a run's id.
 const INSTANCES_QUERY = "instances";
 const GITHUB_QUERY = "github"; // is a GitHub token saved? (else: offer "Sign in with GitHub")
+const HISTORY_QUERY = "history";
+// search and undo are quick requests beside the run on screen: their own id prefixes
+const SEARCH_ID = "search-";
+const UNDO_ID = "undo-";
+
+type Tab = "instances" | "get" | "move" | "history";
+const TABS: Array<[Tab, string]> = [
+  ["instances", "Instances"],
+  ["get", "Get a mod"],
+  ["move", "Move a pack"],
+  ["history", "History"],
+];
+
+interface Search {
+  query: string;
+  id: string | null; // the search being answered; older replies are dropped
+  hits: SearchHit[] | null;
+  reason: string;
+}
+
+const NO_SEARCH: Search = { query: "", id: null, hits: null, reason: "" };
 
 // For a pack the loader is read from its JARs unless the player picks one.
 const PACK_LOADERS = [{ value: "", label: "From the mods" }, ...LOADERS];
@@ -73,7 +105,14 @@ export default function App({ transport: given }: { transport?: Transport }) {
   // One transport (one engine) for the app's life: created once, never per render.
   const [transport] = useState<Transport>(() => given ?? defaultTransport());
   const [state, dispatch] = useReducer(appReducer, initialState);
-  const [tab, setTab] = useState<"get" | "move">("get");
+  const [tab, setTab] = useState<Tab>("instances");
+  const [addFor, setAddFor] = useState<InstanceInfo | null>(null); // the instance a mod goes into
+  const [search, setSearch] = useState<Search>(NO_SEARCH);
+  const searchRef = useRef<string | null>(null);
+  const [history, setHistory] = useState<InstallRecord[]>([]);
+  const [undos, setUndos] = useState<Record<string, UndoResult | "running">>({});
+  const undoFor = useRef<Record<string, string>>({}); // undo request id -> record id
+  const [addSeen, setAddSeen] = useState<string | null>(null); // the add whose result was put away
   const [getForm, setGetForm] = useState<GetParams>({ query: "", mc_version: "", loader: "fabric" });
   const [moveForm, setMoveForm] = useState<MoveParams>({ mods_dir: "", mc_version: "", loader: "" });
   const nextId = useRef(1);
@@ -102,6 +141,31 @@ export default function App({ transport: given }: { transport?: Transport }) {
             if (message.type === "result") setSignedIn(Boolean((message.result as { signed_in?: boolean }).signed_in));
             return;
           }
+          if ("id" in message && message.id === HISTORY_QUERY) {
+            if (message.type === "result") setHistory((message.result as unknown as { history: InstallRecord[] }).history);
+            return;
+          }
+          if ("id" in message && message.id?.startsWith(SEARCH_ID)) {
+            if (message.id !== searchRef.current || (message.type !== "result" && message.type !== "error")) return;
+            const found =
+              message.type === "result"
+                ? (message.result as unknown as SearchResult)
+                : { hits: [], reason: message.error.message };
+            setSearch((s) => ({ ...s, id: null, hits: found.hits, reason: found.reason }));
+            return;
+          }
+          if ("id" in message && message.id?.startsWith(UNDO_ID)) {
+            if (message.type !== "result" && message.type !== "error") return;
+            const record = undoFor.current[message.id];
+            const done: UndoResult =
+              message.type === "result"
+                ? (message.result as unknown as UndoResult)
+                : { undone: false, removed: [], restored: [], kept: [], reason: message.error.message };
+            setUndos((u) => ({ ...u, [record]: done }));
+            transport.send(query(HISTORY_QUERY, "history"));
+            transport.send(query(INSTANCES_QUERY, "instances"));
+            return;
+          }
           dispatch({ type: "server", message });
         },
         (why) => dispatch({ type: "lost", why }),
@@ -123,13 +187,56 @@ export default function App({ transport: given }: { transport?: Transport }) {
     if (engineMethods?.includes("github")) transport.send(query(GITHUB_QUERY, "github"));
   }, [engineMethods, finished, transport]);
 
+  // the history, and the instances' mod counts, change after each add
+  useEffect(() => {
+    if (engineMethods?.includes("history")) transport.send(query(HISTORY_QUERY, "history"));
+    if (finished && state.method === "add" && engineMethods?.includes("instances"))
+      transport.send(query(INSTANCES_QUERY, "instances"));
+  }, [engineMethods, finished, state.method, transport]);
+
   const busy = state.phase === "running" || state.phase === "asking";
   const ready = !busy && state.engine !== null;
 
-  function start(method: Method, target: string, params: GetParams | MoveParams | SignInParams) {
+  function start(method: Method, target: string, params: GetParams | MoveParams | SignInParams | AddParams) {
     const id = String(nextId.current++);
     dispatch({ type: "started", id, target, method });
-    transport.send(request(id, outputDir ? { ...params, output_dir: outputDir } : params, method));
+    // get and move write to a folder of their own; add writes into the instance
+    const toFolder = outputDir && (method === "get" || method === "move");
+    transport.send(request(id, toFolder ? { ...params, output_dir: outputDir } : params, method));
+  }
+
+  function find(text: string) {
+    if (!addFor?.mc_version || !addFor.loader || busy) return;
+    const id = SEARCH_ID + nextId.current++;
+    searchRef.current = id;
+    setSearch({ query: text, id, hits: null, reason: "" });
+    transport.send(request(id, { query: text, mc_version: addFor.mc_version, loader: addFor.loader }, "search"));
+  }
+
+  function add(hit: SearchHit) {
+    if (!addFor?.mc_version || !addFor.loader) return;
+    const params: AddParams = {
+      project_id: hit.project_id,
+      title: hit.title,
+      mods_dir: addFor.mods_dir,
+      mc_version: addFor.mc_version,
+      loader: addFor.loader,
+    };
+    if (addFor.loader_version) params.loader_version = addFor.loader_version;
+    start("add", addFor.mc_version, params);
+  }
+
+  function undo(recordId: string) {
+    const id = UNDO_ID + nextId.current++;
+    undoFor.current[id] = recordId;
+    setUndos((u) => ({ ...u, [recordId]: "running" }));
+    transport.send(request(id, { id: recordId }, "undo"));
+  }
+
+  function openAdd(instance: InstanceInfo | null) {
+    setAddFor(instance);
+    setSearch(NO_SEARCH);
+    searchRef.current = null;
   }
 
   function reply(value: unknown) {
@@ -138,8 +245,10 @@ export default function App({ transport: given }: { transport?: Transport }) {
     dispatch({ type: "answered", value });
   }
 
-  // the run on screen belongs to the tab that started it
-  const showing = state.requestId !== null && state.method === tab;
+  // the run on screen belongs to the tab that started it (an add: the instances tab)
+  const showing = state.requestId !== null && (state.method === "add" ? tab === "instances" : state.method === tab);
+  // an add on screen until the player goes back to the search (its hits hide meanwhile)
+  const adding = showing && state.method === "add" && state.requestId !== addSeen;
 
   return (
     <>
@@ -158,7 +267,7 @@ export default function App({ transport: given }: { transport?: Transport }) {
       <main className="panel">
         {update && <UpdateCard update={update} busy={busy} />}
         <nav className="tabs" role="tablist">
-          {(["get", "move"] as const).map((m) => (
+          {TABS.map(([m, label]) => (
             <button
               key={m}
               role="tab"
@@ -166,14 +275,38 @@ export default function App({ transport: given }: { transport?: Transport }) {
               className={tab === m ? "tab active" : "tab"}
               onClick={() => setTab(m)}
             >
-              {m === "get" ? "Get a mod" : "Move a pack"}
+              {label}
             </button>
           ))}
         </nav>
 
-        {tab === "get" ? (
-          <GetForm form={getForm} setForm={setGetForm} ready={ready} busy={busy} onStart={start} />
-        ) : (
+        {tab === "instances" && !addFor && (
+          <InstanceList
+            instances={instances}
+            canAdd={Boolean(engineMethods?.includes("add"))}
+            onAdd={openAdd}
+            onMove={(i) => {
+              setMoveForm({ ...moveForm, mods_dir: i.mods_dir, loader: i.loader ?? "" });
+              setTab("move");
+            }}
+          />
+        )}
+        {tab === "instances" && addFor && (
+          <AddScreen
+            instance={addFor}
+            search={search}
+            hideHits={adding}
+            ready={ready}
+            busy={busy}
+            onSearch={find}
+            onAdd={add}
+            onOpen={(url) => transport.openUrl(url).catch(() => undefined)}
+            onBack={() => openAdd(null)}
+          />
+        )}
+        {tab === "history" && <HistoryList records={history} undos={undos} busy={busy} onUndo={undo} />}
+        {tab === "get" && <GetForm form={getForm} setForm={setGetForm} ready={ready} busy={busy} onStart={start} />}
+        {tab === "move" && (
           <MoveForm
             form={moveForm}
             setForm={setMoveForm}
@@ -186,12 +319,22 @@ export default function App({ transport: given }: { transport?: Transport }) {
         )}
         {state.phase === "connecting" && <p className="detail">Starting the engine...</p>}
 
-        {showing && state.method === "get" && <Progress state={state} />}
+        {showing && (state.method === "get" || (adding && !state.addResult)) && <Progress state={state} />}
         {showing && state.method === "move" && state.pack && <PackList state={state} />}
         {showing && state.question && <Question payload={state.question.payload} onAnswer={reply} />}
         {state.githubCode && busy && <GitHubCode code={state.githubCode} />}
         {state.method === "sign_in" && state.signIn && <SignInDone result={state.signIn} />}
-        {showing && state.result && <Result state={state} />}
+        {showing && state.result && !adding && <Result state={state} />}
+        {adding && state.addResult && addFor && (
+          <AddDone
+            result={state.addResult}
+            instance={addFor}
+            undo={state.addResult.record ? undos[state.addResult.record.id] : undefined}
+            busy={busy}
+            onUndo={undo}
+            onAgain={() => setAddSeen(state.requestId)}
+          />
+        )}
         {state.error && (
           <section className="card bad">
             <div className="title">
@@ -234,6 +377,289 @@ function UpdateCard({ update, busy }: { update: AvailableUpdate; busy: boolean }
 }
 
 type StartFn = (method: Method, target: string, params: GetParams | MoveParams) => void;
+
+/** Home: the player's instances, each with what Modkeel can do with it. */
+function InstanceList(props: {
+  instances: InstanceInfo[];
+  canAdd: boolean;
+  onAdd: (i: InstanceInfo) => void;
+  onMove: (i: InstanceInfo) => void;
+}) {
+  const { instances, canAdd, onAdd, onMove } = props;
+  if (instances.length === 0) {
+    return (
+      <section className="card">
+        <div className="title">No instances found</div>
+        <p className="detail">
+          Modkeel reads Prism, PolyMC, Modrinth App, CurseForge, ATLauncher, GDLauncher, FTB App, SKlauncher and the
+          Minecraft Launcher. Get a mod and Move a pack also take a folder.
+        </p>
+      </section>
+    );
+  }
+  return (
+    <>
+      {instances.map((i) => {
+        // without its version and loader there is nothing to search builds for
+        const known = Boolean(i.mc_version && i.loader);
+        return (
+          <section className="card instance" key={i.mods_dir} data-testid="instance">
+            <div className="title">{i.name}</div>
+            <div className="pills">
+              {i.mc_version && <span className="pill">{i.mc_version}</span>}
+              {i.loader && <span className="pill">{loaderLabel(i.loader)}</span>}
+              <span className="pill">
+                {i.mods} mod{i.mods === 1 ? "" : "s"}
+              </span>
+              <span className="pill">{LAUNCHER_LABELS[i.launcher]}</span>
+            </div>
+            <div className="row">
+              {canAdd && (
+                <button
+                  className="primary"
+                  disabled={!known}
+                  title={known ? undefined : "Its Minecraft version or loader is unknown"}
+                  onClick={() => onAdd(i)}
+                >
+                  Add a mod
+                </button>
+              )}
+              <button onClick={() => onMove(i)}>Move</button>
+            </div>
+          </section>
+        );
+      })}
+    </>
+  );
+}
+
+/** Search Modrinth for the instance's version and loader; the player picks one hit. */
+function AddScreen(props: {
+  instance: InstanceInfo;
+  search: Search;
+  ready: boolean;
+  busy: boolean;
+  onSearch: (query: string) => void;
+  onAdd: (hit: SearchHit) => void;
+  onOpen: (url: string) => void;
+  onBack: () => void;
+  hideHits: boolean;
+}) {
+  const { instance, search, ready, busy, onSearch, onAdd, onOpen, onBack, hideHits } = props;
+  const [text, setText] = useState(search.query);
+  const loader = instance.loader ?? "";
+  return (
+    <>
+      <section className="card">
+        <div className="title">
+          Add to {instance.name}
+          <span className="pill">{instance.mc_version}</span>
+          <span className="pill">{loaderLabel(loader)}</span>
+          <span className="spacer" />
+          <button disabled={busy} onClick={onBack}>
+            Back
+          </button>
+        </div>
+        <form
+          className="row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (text.trim()) onSearch(text.trim());
+          }}
+        >
+          <input
+            className="grow"
+            name="search"
+            placeholder="Sodium, Voxy, JEI..."
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            autoFocus
+          />
+          <button type="submit" disabled={!ready || !text.trim()}>
+            {search.id ? "Searching..." : "Search"}
+          </button>
+        </form>
+      </section>
+      {search.reason && (
+        <section className="card bad">
+          <div className="title">Search failed</div>
+          <p className="detail">{search.reason}</p>
+        </section>
+      )}
+      {search.hits?.length === 0 && !search.reason && (
+        <section className="card">
+          <p className="detail">Nothing on Modrinth for &ldquo;{search.query}&rdquo;.</p>
+        </section>
+      )}
+      {search.hits && search.hits.length > 0 && !hideHits && (
+        <section className="card hits" data-testid="hits">
+          {search.hits.map((h) => (
+            <div className="hit" key={h.project_id}>
+              {h.icon_url ? (
+                <img className="icon" src={h.icon_url} alt="" width={40} height={40} loading="lazy" />
+              ) : (
+                <span className="icon" />
+              )}
+              <div className="hit-text">
+                <div className="hit-title">
+                  <strong>{h.title}</strong>
+                  <span className="by">
+                    by {h.author} · {compactCount(h.downloads)} downloads
+                  </span>
+                </div>
+                <div className={`status ${h.status}`}>{hitStatusLabel(h.status, loader)}</div>
+                {h.description && <div className="hit-desc">{h.description}</div>}
+              </div>
+              <div className="hit-actions">
+                <button title={h.page_url} onClick={() => onOpen(h.page_url)}>
+                  View page
+                </button>
+                <button
+                  className={h.status === "official" ? "primary" : ""}
+                  disabled={busy || !ready}
+                  onClick={() => onAdd(h)}
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+    </>
+  );
+}
+
+/** An add's outcome: what went into the instance, how far it was checked, and Undo. */
+function AddDone(props: {
+  result: AddResult;
+  instance: InstanceInfo;
+  undo: UndoResult | "running" | undefined;
+  busy: boolean;
+  onUndo: (recordId: string) => void;
+  onAgain: () => void;
+}) {
+  const { result, instance, undo, busy, onUndo, onAgain } = props;
+  const again = (
+    <button disabled={busy} onClick={onAgain}>
+      Back to the search
+    </button>
+  );
+  const record = result.record;
+  const d = result.get?.delivered ?? null;
+  if (!result.installed) {
+    return (
+      <section className={`card ${record ? "warn" : "bad"}`} data-testid="result">
+        <div className="title">Nothing added to {instance.name}</div>
+        <p className="detail act">{result.reason}.</p>
+        {result.get?.proposal && <p className="detail">{result.get.proposal.summary}.</p>}
+        {record && <UndoLine record={record} undo={undo} busy={busy} onUndo={onUndo} />}
+        <div className="row">{again}</div>
+      </section>
+    );
+  }
+  const main = d ? fileName(d.jar_path) : null;
+  const also = record?.added.filter((a) => a.name !== main) ?? [];
+  return (
+    <section className="card ok" data-testid="result">
+      <div className="title">
+        {d?.mod_name ?? record?.mod} is in {instance.name}
+        {d && <span className="pill">{d.mod_version}</span>}
+        {d && <span className="pill">{d.verb}</span>}
+      </div>
+      {d?.caveat && <p className="detail act">{d.caveat}</p>}
+      {record && record.added.length === 0 && <p className="detail">It was already there: nothing to add.</p>}
+      {also.length > 0 && (
+        <>
+          <p className="detail">Also added, it needs them:</p>
+          <ul className="steps mono">
+            {also.map((a) => (
+              <li key={a.name}>{a.name}</li>
+            ))}
+          </ul>
+        </>
+      )}
+      {record && record.replaced.length > 0 && (
+        <p className="detail">Replaced {record.replaced.join(", ")} (kept: Undo puts it back).</p>
+      )}
+      {record && record.skipped.length > 0 && <p className="detail">Already in the pack: {record.skipped.join(", ")}.</p>}
+      {record && record.added.length > 0 && <UndoLine record={record} undo={undo} busy={busy} onUndo={onUndo} />}
+      <div className="row">{again}</div>
+    </section>
+  );
+}
+
+function UndoLine(props: {
+  record: InstallRecord;
+  undo: UndoResult | "running" | undefined;
+  busy: boolean;
+  onUndo: (recordId: string) => void;
+}) {
+  const { record, undo, busy, onUndo } = props;
+  if (undo && undo !== "running") {
+    if (!undo.undone) return <p className="detail act">Undo failed: {undo.reason}.</p>;
+    return (
+      <p className="detail" data-testid="undone">
+        Undone: removed {undo.removed.length ? undo.removed.join(", ") : "nothing"}
+        {undo.restored.length > 0 && <>; put back {undo.restored.join(", ")}</>}
+        {undo.kept.length > 0 && <>; left {undo.kept.join(", ")} (changed since)</>}.
+      </p>
+    );
+  }
+  if (record.undone) return <p className="detail">Undone.</p>;
+  return (
+    <div className="row">
+      <button disabled={busy || undo === "running"} onClick={() => onUndo(record.id)}>
+        {undo === "running" ? "Undoing..." : "Undo"}
+      </button>
+    </div>
+  );
+}
+
+function when(seconds: number): string {
+  return new Date(seconds * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+/** Every add, newest first: what went where, and Undo for the ones still in place. */
+function HistoryList(props: {
+  records: InstallRecord[];
+  undos: Record<string, UndoResult | "running">;
+  busy: boolean;
+  onUndo: (recordId: string) => void;
+}) {
+  const { records, undos, busy, onUndo } = props;
+  if (records.length === 0) {
+    return (
+      <section className="card">
+        <div className="title">Nothing added yet</div>
+        <p className="detail">Mods added to an instance show here, each with Undo.</p>
+      </section>
+    );
+  }
+  return (
+    <>
+      {records.map((r) => (
+        <section className={r.undone ? "card" : "card ok"} key={r.id} data-testid="history">
+          <div className="title">
+            {r.mod}
+            <span className="pill">{r.mc_version}</span>
+            <span className="pill">{loaderLabel(r.loader)}</span>
+            {r.undone && <span className="pill">undone</span>}
+          </div>
+          <p className="detail">
+            {when(r.time)} · <span className="mono">{r.mods_dir}</span>
+          </p>
+          <p className="detail">
+            Added {r.added.length ? r.added.map((a) => a.name).join(", ") : "nothing"}
+            {r.replaced.length > 0 && <>; replaced {r.replaced.join(", ")}</>}
+          </p>
+          {r.added.length > 0 && <UndoLine record={r} undo={undos[r.id]} busy={busy} onUndo={onUndo} />}
+        </section>
+      ))}
+    </>
+  );
+}
+
 
 function GetForm(props: {
   form: GetParams;

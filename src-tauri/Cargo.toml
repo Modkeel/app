@@ -17,6 +17,8 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
+# "View page" on a search result opens its Modrinth page in the browser
+tauri-plugin-opener = "2"
 # Updates from Modkeel/app releases (src/updater.ts); registered only in builds that carry
 # the updater's public key (tauri.conf.json plugins.updater), see lib.rs
 tauri-plugin-updater = "2"

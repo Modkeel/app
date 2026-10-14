@@ -1,13 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window: core events (engine lines), the app's engine commands, the folder picker (open only), and its own updates (check, install, restart).",
+  "description": "The main window: core events (engine lines), the app's engine commands, the folder picker (open only), web pages in the browser (http/https), and its own updates (check, install, restart).",
   "windows": [
     "main"
   ],
   "permissions": [
     "core:default",
     "dialog:allow-open",
+    "opener:allow-open-url",
     "updater:default",
     "process:allow-restart"
   ]

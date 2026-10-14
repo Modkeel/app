@@ -88,7 +88,94 @@ export interface MoveParams {
   new_instance?: boolean; // also add the pack to its launcher (Prism) as a new instance
 }
 
-export type Method = "get" | "move" | "sign_in";
+export type Method = "get" | "move" | "sign_in" | "add";
+
+/** What Modkeel can say about a search hit on the instance's version and loader
+ * (modkeel/core/catalog.py STATUSES). */
+export type HitStatus = "official" | "other_versions" | "other_loader";
+
+/** One Modrinth project from the `search` method: who it is, so the player picks the right one. */
+export interface SearchHit {
+  project_id: string;
+  slug: string;
+  title: string;
+  author: string;
+  downloads: number;
+  icon_url: string | null;
+  description: string;
+  page_url: string;
+  status: HitStatus;
+}
+
+export interface SearchParams {
+  query: string;
+  mc_version: string;
+  loader: string;
+  limit?: number;
+}
+
+/** search's reply: hits, or none and why (Modrinth down is not an error). */
+export interface SearchResult {
+  hits: SearchHit[];
+  reason: string;
+}
+
+/** add: one mod (a picked search hit) into an instance's mods folder (modkeel/core/install.py). */
+export interface AddParams {
+  project_id: string;
+  title: string;
+  mods_dir: string;
+  mc_version: string;
+  loader: string;
+  loader_version?: string;
+}
+
+/** What one add did to a mods folder; the engine's history holds one per add. */
+export interface InstallRecord {
+  id: string;
+  time: number; // seconds since the epoch
+  mods_dir: string;
+  mod: string;
+  mc_version: string;
+  loader: string;
+  added: Array<{ name: string; sha1: string }>;
+  replaced: string[]; // older files it took out, kept for undo
+  skipped: string[]; // files the instance already had
+  undone: boolean;
+}
+
+export interface AddResult {
+  installed: boolean;
+  reason: string;
+  record: InstallRecord | null;
+  get: GetResult | null;
+}
+
+export interface UndoResult {
+  undone: boolean;
+  removed: string[];
+  restored: string[];
+  kept: string[]; // changed since the add: left alone
+  reason: string;
+}
+
+/** The status as the player reads it: what happens if they press Add. */
+export function hitStatusLabel(status: HitStatus, loader: string): string {
+  if (status === "official") return "Official build";
+  if (status === "other_versions") return "No build for this version: Modkeel looks for one";
+  return `Not made for ${loaderLabel(loader)}`;
+}
+
+/** 7242602 -> "7.2M", 323400 -> "323k", 950 -> "950". */
+export function compactCount(n: number): string {
+  if (n >= 999_500) return `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, "")}M`;
+  if (n >= 1e3) return `${Math.round(n / 1e3)}k`;
+  return String(n);
+}
+
+export function loaderLabel(loader: string): string {
+  return loader === "neoforge" ? "NeoForge" : loader.replace(/^./, (c) => c.toUpperCase());
+}
 
 /** sign_in: GitHub's device flow in the engine (modkeel/ghauth.py); the token is saved there. */
 export interface SignInParams {
@@ -139,7 +226,7 @@ export const LAUNCHER_LABELS: Record<InstanceInfo["launcher"], string> = {
 
 /** "1.21.1 · NeoForge · 84 mods · Prism Launcher": what an instance runs, in one line. */
 export function instanceSummary(i: InstanceInfo): string {
-  const loader = i.loader ? i.loader.replace(/^neoforge$/, "NeoForge").replace(/^./, (c) => c.toUpperCase()) : null;
+  const loader = i.loader ? loaderLabel(i.loader) : null;
   return [i.mc_version, loader, `${i.mods} mod${i.mods === 1 ? "" : "s"}`, LAUNCHER_LABELS[i.launcher]]
     .filter(Boolean)
     .join(" · ");
@@ -149,7 +236,7 @@ export function instanceSummary(i: InstanceInfo): string {
  * A query (the engine's QUERIES: read-only, answered at once, even during a run). Its reply
  * carries its own id and never touches the run's state: the app routes it before reduce().
  */
-export function query(id: string, method: "instances" | "github") {
+export function query(id: string, method: "instances" | "github" | "history") {
   return { type: "request", id, method, params: {} };
 }
 
@@ -157,7 +244,7 @@ export type ServerMessage =
   | { type: "hello"; protocol: number; modkeel: string; methods: string[] }
   | { type: "event"; id: string; event: EngineEvent }
   | { type: "question"; id: string; qid: string; question: QuestionPayload }
-  | { type: "result"; id: string; result: GetResult | MoveResult }
+  | { type: "result"; id: string; result: GetResult | MoveResult | AddResult }
   | { type: "error"; id?: string; error: { code: string; message: string } };
 
 export interface GetParams {
@@ -234,6 +321,7 @@ export interface State {
   result: GetResult | null;
   pack: PackRow[] | null; // move: one row per JAR, from pack_scanned on
   moveResult: MoveResult | null;
+  addResult: AddResult | null; // add: what went into the instance (or why nothing did)
   githubCode: { code: string; url: string; expiresIn: number } | null; // while signing in
   signIn: SignInResult | null; // a sign_in request's outcome
   error: { code: string; message: string } | null;
@@ -253,6 +341,7 @@ export const initialState: State = {
   result: null,
   pack: null,
   moveResult: null,
+  addResult: null,
   githubCode: null,
   signIn: null,
   error: null,
@@ -299,6 +388,10 @@ export function reduce(state: State, message: ServerMessage): State {
           detail: m.detail,
         }));
         return { ...state, phase: "done", activity: null, question: null, githubCode: null, moveResult: r, pack, target: r.target };
+      }
+      if (state.method === "add") {
+        const r = message.result as AddResult;
+        return { ...state, phase: "done", activity: null, question: null, githubCode: null, addResult: r, result: r.get };
       }
       return { ...state, phase: "done", activity: null, question: null, githubCode: null, result: message.result as GetResult };
     case "error":
@@ -405,7 +498,11 @@ export function answered(state: State, value: unknown): State {
   return { ...state, phase: "running", question: null, target, pack: again };
 }
 
-export function request(id: string, params: GetParams | MoveParams | SignInParams, method: Method = "get") {
+export function request(
+  id: string,
+  params: GetParams | MoveParams | SignInParams | AddParams | SearchParams | { id: string },
+  method: Method | "search" | "undo" = "get",
+) {
   return { type: "request", id, method, params };
 }
 

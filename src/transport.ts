@@ -16,6 +16,8 @@ export interface Transport {
   outputDir(): Promise<string | null>;
   /** The system's folder picker (the app); null when there is none (a browser): type it. */
   pickFolder(): Promise<string | null>;
+  /** A web page (a mod's Modrinth page) in the player's browser. */
+  openUrl(url: string): Promise<void>;
 }
 
 export class TauriTransport implements Transport {
@@ -44,6 +46,11 @@ export class TauriTransport implements Transport {
     const { open } = await import("@tauri-apps/plugin-dialog");
     const picked = await open({ directory: true, multiple: false, title: "The pack's mods folder" });
     return typeof picked === "string" ? picked : null;
+  }
+
+  async openUrl(url: string) {
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(url);
   }
 
   async send(message: object) {
@@ -78,6 +85,10 @@ export class BridgeTransport implements Transport {
 
   async pickFolder() {
     return null;
+  }
+
+  async openUrl(url: string) {
+    window.open(url, "_blank", "noopener");
   }
 
   stop() {
