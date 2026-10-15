@@ -10,9 +10,8 @@ src/                React + Vite screen
   protocol.ts       protocol types + a pure reducer: server messages -> screen state
   transport.ts      Tauri in the app, a WebSocket to the dev bridge in a browser
   updater.ts        offers new releases (Tauri's updater plugin)
-  App.tsx           two tabs: Get a mod (method get), Move a pack (method move: the
-                    player's launcher instances (query instances) or a mods folder, the
-                    system folder picker, one row per JAR as it resolves)
+  App.tsx           the player's instances (add a mod with undo, move), Get a mod, Move a
+                    pack, History; every file and method in ARCHITECTURE.md
 src-tauri/          Tauri 2 (Rust): starts the engine, relays lines both ways, kills it on exit
   src/engine.rs     the child process (no Tauri inside, unit-tested with sh)
 engine/             the bundled engine: the modkeel CLI from PyPI, pinned in requirements.txt

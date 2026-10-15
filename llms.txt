@@ -1,0 +1,11 @@
+# Modkeel app
+
+> Free, open source (MIT) desktop app for Windows, macOS and Linux that keeps modded Minecraft packs running. It reads the player's launcher instances (Prism, Modrinth App, CurseForge, the official launcher and others), adds a mod into one with undo, names the mods that have no build for the instance's Minecraft version, and moves a pack to another Minecraft version (for a Prism instance, as a new instance beside the old one, which is left untouched). It is a window over the Modkeel engine (the `modkeel` CLI, `serve --stdio`).
+
+- Code map: [ARCHITECTURE.md](ARCHITECTURE.md): React screen (src/), Rust shell that relays lines (src-tauri/), the engine bundled from PyPI (engine/).
+- Build, test and release: [DEVELOPING.md](DEVELOPING.md). Player docs: [README.md](README.md). Security reports: [SECURITY.md](SECURITY.md).
+- Protocol: JSON lines, defined in `modkeel/core/wire.py` of https://github.com/Modkeel/modkeel; the app's side is `src/protocol.ts`.
+- Releases: installers built by GitHub Actions from the tagged commit, with SHA256SUMS, build provenance (`gh attestation verify <file> -R Modkeel/app`) and each file's VirusTotal report in the notes. Updates are signed with the app's updater key. Not yet signed by Microsoft or Apple, so Windows SmartScreen warns on first open.
+- What it connects to: GitHub, Modrinth, Mojang/Fabric/NeoForge metadata, Prism Launcher's metadata, Adoptium (a JDK when needed), api.modkeel.com (CurseForge lookups by file fingerprint), and the latest GitHub release for updates. No Modkeel account and no analytics; signing in with GitHub is optional (it raises GitHub's rate limit).
+- Releases: https://github.com/Modkeel/app/releases
+- Project site: https://modkeel.com (verification guide: https://modkeel.com/verify)
