@@ -127,6 +127,11 @@ main.panel {
 .code { font-size: 22px; letter-spacing: 3px; padding: 4px 10px; background: var(--pill); }
 .instance-summary { margin: 0 0 8px; }   /* beside the picker, on its baseline */
 .row.instances { margin-bottom: 10px; }
+.instance-head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+.instance-text { flex: 1; min-width: 0; }
+.instance-text .pills { margin: 4px 0 0; }
+.instance-head .icon { width: 48px; height: 48px; flex: none; border: 1px solid #000; object-fit: cover; }
+.instance-head .icon.initial { display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 22px; text-shadow: 1px 1px 0 #0006; }
 label.check { display: flex; flex-direction: row; align-items: center; gap: 8px; margin: 0 0 10px; }
 label.check input { width: auto; margin: 0; accent-color: var(--ok); }
 

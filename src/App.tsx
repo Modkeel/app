@@ -379,6 +379,18 @@ function UpdateCard({ update, busy }: { update: AvailableUpdate; busy: boolean }
 type StartFn = (method: Method, target: string, params: GetParams | MoveParams) => void;
 
 /** Home: the player's instances, each with what Modkeel can do with it. */
+/** The launcher's picture, or the name's initial on a tint of its own. */
+function InstanceIcon({ instance }: { instance: InstanceInfo }) {
+  if (instance.icon) return <img className="icon" src={instance.icon} alt="" width={48} height={48} />;
+  let hue = 0;
+  for (const c of instance.name) hue = (hue * 31 + c.charCodeAt(0)) % 360;
+  return (
+    <span className="icon initial" style={{ background: `hsl(${hue} 35% 38%)` }} aria-hidden="true">
+      {instance.name.trim().charAt(0).toUpperCase() || "?"}
+    </span>
+  );
+}
+
 function InstanceList(props: {
   instances: InstanceInfo[];
   canAdd: boolean;
@@ -404,14 +416,19 @@ function InstanceList(props: {
         const known = Boolean(i.mc_version && i.loader);
         return (
           <section className="card instance" key={i.mods_dir} data-testid="instance">
-            <div className="title">{i.name}</div>
-            <div className="pills">
-              {i.mc_version && <span className="pill">{i.mc_version}</span>}
-              {i.loader && <span className="pill">{loaderLabel(i.loader)}</span>}
-              <span className="pill">
-                {i.mods} mod{i.mods === 1 ? "" : "s"}
-              </span>
-              <span className="pill">{LAUNCHER_LABELS[i.launcher]}</span>
+            <div className="instance-head">
+              <InstanceIcon instance={i} />
+              <div className="instance-text">
+                <div className="title">{i.name}</div>
+                <div className="pills">
+                  {i.mc_version && <span className="pill">{i.mc_version}</span>}
+                  {i.loader && <span className="pill">{loaderLabel(i.loader)}</span>}
+                  <span className="pill">
+                    {i.mods} mod{i.mods === 1 ? "" : "s"}
+                  </span>
+                  <span className="pill">{LAUNCHER_LABELS[i.launcher]}</span>
+                </div>
+              </div>
             </div>
             <div className="row">
               {canAdd && (

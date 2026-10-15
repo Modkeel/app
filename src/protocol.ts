@@ -210,6 +210,7 @@ export interface InstanceInfo {
   loader: string | null;
   loader_version: string | null;
   mods: number;
+  icon?: string | null; // the launcher's picture as a data: URI, when it has one
 }
 
 export const LAUNCHER_LABELS: Record<InstanceInfo["launcher"], string> = {

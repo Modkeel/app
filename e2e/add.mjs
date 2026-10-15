@@ -7,9 +7,10 @@
 //   npm run build && node e2e/add.mjs          (needs network: Modrinth)
 
 import { spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { deflateSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright-core";
 
@@ -30,6 +31,51 @@ writeFileSync(
     ],
   }),
 );
+
+// a second instance with a custom Prism icon (icons/<iconKey>.png), so the home shows both a
+// launcher picture and the initial drawn for an instance without one
+const prism = join(instance, "..", "..");
+const iconned = join(prism, "instances", "Sky pack");
+mkdirSync(join(iconned, "minecraft", "mods"), { recursive: true });
+writeFileSync(join(iconned, "instance.cfg"), "[General]\nname=Sky pack\niconKey=sky\n");
+writeFileSync(join(iconned, "mmc-pack.json"), readFileSync(join(instance, "mmc-pack.json")));
+mkdirSync(join(prism, "icons"), { recursive: true });
+writeFileSync(join(prism, "icons", "sky.png"), png(16, (x, y) => (y < 10 ? [110, 170, 240] : y < 12 ? [90, 160, 60] : [120, 85, 60])));
+
+/** A tiny RGB PNG, so the test needs no image files. */
+function png(size, color) {
+  const crc = (buf) => {
+    let c = ~0;
+    for (const b of buf) {
+      c ^= b;
+      for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1));
+    }
+    return ~c >>> 0;
+  };
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const out = Buffer.alloc(body.length + 8);
+    out.writeUInt32BE(data.length, 0);
+    body.copy(out, 4);
+    out.writeUInt32BE(crc(body), body.length + 4);
+    return out;
+  };
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(size, 0);
+  header.writeUInt32BE(size, 4);
+  header.set([8, 2, 0, 0, 0], 8);
+  const rows = [];
+  for (let y = 0; y < size; y++) {
+    rows.push(0);
+    for (let x = 0; x < size; x++) rows.push(...color(x, y));
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", header),
+    chunk("IDAT", deflateSync(Buffer.from(rows))),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
 
 const win = process.platform === "win32";
 const env = {
