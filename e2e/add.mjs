@@ -2,7 +2,8 @@
 // empty mods folder) is made in a temporary home, the real engine runs behind the dev bridge
 // and searches Modrinth for real. Clicks what a player would click: the instance's "Add a
 // mod", search "Sodium", Add on the first official hit, Undo; then the History tab.
-// Screenshots go to e2e/screenshots/add-*.png.
+// A second instance (Sky pack) has a custom icon and a JAR with no build for its version: its
+// card must name that mod. Screenshots go to e2e/screenshots/add-*.png.
 //
 //   npm run build && node e2e/add.mjs          (needs network: Modrinth)
 
@@ -41,6 +42,15 @@ writeFileSync(join(iconned, "instance.cfg"), "[General]\nname=Sky pack\niconKey=
 writeFileSync(join(iconned, "mmc-pack.json"), readFileSync(join(instance, "mmc-pack.json")));
 mkdirSync(join(prism, "icons"), { recursive: true });
 writeFileSync(join(prism, "icons", "sky.png"), png(16, (x, y) => (y < 10 ? [110, 170, 240] : y < 12 ? [90, 160, 60] : [120, 85, 60])));
+
+// and a real JAR with no Fabric 1.21.11 build (Iron Chests: NeoForge/Forge only), so its card
+// says which mod has no build for it
+const ironChests = await fetch(
+  'https://api.modrinth.com/v2/project/iron-chests/version?loaders=["neoforge"]',
+  { headers: { "User-Agent": "Modkeel/app-e2e" } },
+).then((r) => r.json());
+const jar = ironChests[0].files.find((f) => f.primary) ?? ironChests[0].files[0];
+writeFileSync(join(iconned, "minecraft", "mods", jar.filename), Buffer.from(await (await fetch(jar.url)).arrayBuffer()));
 
 /** A tiny RGB PNG, so the test needs no image files. */
 function png(size, color) {
@@ -121,6 +131,14 @@ try {
   await card.waitFor({ timeout: 20000 });
   await page.screenshot({ path: shots + "add-1-instances.png" });
 
+  const sky = page.getByTestId("instance").filter({ hasText: "Sky pack" });
+  const lacking = sky.getByTestId("missing-builds");
+  await lacking.waitFor({ timeout: 60000 });
+  await lacking.locator("summary").click();
+  const said = await lacking.innerText();
+  if (!said.includes("1 mod has no 1.21.11 Fabric build") || !said.includes("Iron Chests"))
+    throw new Error(`missing builds said: ${said}`);
+  await page.screenshot({ path: shots + "add-0-missing.png", fullPage: true });
   await card.getByRole("button", { name: "Add a mod" }).click();
   await page.fill("input[name=search]", "Sodium");
   await page.getByRole("button", { name: "Search" }).click();

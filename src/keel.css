@@ -250,3 +250,8 @@ button.primary {
 .hit .status.other_loader { color: var(--bad); }
 .hit-desc { color: var(--detail); font-size: 12px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hit-actions { display: flex; gap: 6px; flex: none; }
+.missing { margin: 2px 0 10px; }
+.missing summary { cursor: pointer; margin: 0; }
+.missing ul { margin: 4px 0 0; padding-left: 18px; }
+.missing li { margin: 2px 0; }
+button.link { background: none; border: 0; box-shadow: none; padding: 0; color: var(--act); text-decoration: underline; cursor: pointer; font: inherit; }

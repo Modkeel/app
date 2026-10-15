@@ -13,11 +13,13 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import {
   AddParams,
   AddResult,
+  BuildsCheck,
   GetParams,
   InstallRecord,
   InstanceInfo,
   LAUNCHER_LABELS,
   Method,
+  MissingBuild,
   PackRow,
   MoveParams,
   SIGN_IN_ANSWER,
@@ -29,6 +31,7 @@ import {
   State,
   answer,
   answered,
+  buildsLookup,
   compactCount,
   hitStatusLabel,
   initialState,
@@ -79,6 +82,7 @@ const GITHUB_QUERY = "github"; // is a GitHub token saved? (else: offer "Sign in
 const HISTORY_QUERY = "history";
 // search and undo are quick requests beside the run on screen: their own id prefixes
 const SEARCH_ID = "search-";
+const BUILDS_ID = "builds:"; // + the instance's mods folder
 const UNDO_ID = "undo-";
 
 type Tab = "instances" | "get" | "move" | "history";
@@ -118,6 +122,8 @@ export default function App({ transport: given }: { transport?: Transport }) {
   const nextId = useRef(1);
   const [outputDir, setOutputDir] = useState<string | null>(null);
   const [instances, setInstances] = useState<InstanceInfo[]>([]);
+  const [builds, setBuilds] = useState<Record<string, BuildsCheck>>({}); // by mods folder
+  const buildsAsked = useRef<Record<string, string>>({}); // mods folder -> what was asked
   const [signedIn, setSignedIn] = useState<boolean | null>(null); // null: not known yet
   const [update, setUpdate] = useState<AvailableUpdate | null>(null);
 
@@ -143,6 +149,14 @@ export default function App({ transport: given }: { transport?: Transport }) {
           }
           if ("id" in message && message.id === HISTORY_QUERY) {
             if (message.type === "result") setHistory((message.result as unknown as { history: InstallRecord[] }).history);
+            return;
+          }
+          if ("id" in message && message.id?.startsWith(BUILDS_ID)) {
+            // a failed lookup shows nothing: the count is a hint, never a blocker
+            if (message.type === "result") {
+              const dir = message.id.slice(BUILDS_ID.length);
+              setBuilds((b) => ({ ...b, [dir]: message.result as unknown as BuildsCheck }));
+            }
             return;
           }
           if ("id" in message && message.id?.startsWith(SEARCH_ID)) {
@@ -180,6 +194,19 @@ export default function App({ transport: given }: { transport?: Transport }) {
   useEffect(() => {
     if (engineMethods?.includes("instances")) transport.send(query(INSTANCES_QUERY, "instances"));
   }, [engineMethods, transport]);
+
+  // each instance's mods without a build for its version: asked again only when its version,
+  // loader or mod count changed (an add, an undo, the player's own changes)
+  useEffect(() => {
+    if (!engineMethods?.includes("builds")) return;
+    for (const i of instances) {
+      if (!i.mc_version || !i.loader || i.mods === 0) continue;
+      const asked = `${i.mc_version}|${i.loader}|${i.mods}`;
+      if (buildsAsked.current[i.mods_dir] === asked) continue;
+      buildsAsked.current[i.mods_dir] = asked;
+      transport.send(buildsLookup(BUILDS_ID + i.mods_dir, i));
+    }
+  }, [engineMethods, instances, transport]);
 
   // whether GitHub is signed in: at hello, and after each run (a run may have signed in)
   const finished = state.phase === "done" || state.phase === "failed";
@@ -283,6 +310,8 @@ export default function App({ transport: given }: { transport?: Transport }) {
         {tab === "instances" && !addFor && (
           <InstanceList
             instances={instances}
+            builds={builds}
+            onOpen={(url) => transport.openUrl(url).catch(() => undefined)}
             canAdd={Boolean(engineMethods?.includes("add"))}
             onAdd={openAdd}
             onMove={(i) => {
@@ -393,11 +422,13 @@ function InstanceIcon({ instance }: { instance: InstanceInfo }) {
 
 function InstanceList(props: {
   instances: InstanceInfo[];
+  builds: Record<string, BuildsCheck>;
+  onOpen: (url: string) => void;
   canAdd: boolean;
   onAdd: (i: InstanceInfo) => void;
   onMove: (i: InstanceInfo) => void;
 }) {
-  const { instances, canAdd, onAdd, onMove } = props;
+  const { instances, builds, onOpen, canAdd, onAdd, onMove } = props;
   if (instances.length === 0) {
     return (
       <section className="card">
@@ -414,8 +445,9 @@ function InstanceList(props: {
       {instances.map((i) => {
         // without its version and loader there is nothing to search builds for
         const known = Boolean(i.mc_version && i.loader);
+        const missing = builds[i.mods_dir]?.missing ?? [];
         return (
-          <section className="card instance" key={i.mods_dir} data-testid="instance">
+          <section className={`card instance${missing.length ? " warn" : ""}`} key={i.mods_dir} data-testid="instance">
             <div className="instance-head">
               <InstanceIcon instance={i} />
               <div className="instance-text">
@@ -430,6 +462,7 @@ function InstanceList(props: {
                 </div>
               </div>
             </div>
+            {missing.length > 0 && <MissingBuilds instance={i} missing={missing} onOpen={onOpen} />}
             <div className="row">
               {canAdd && (
                 <button
@@ -447,6 +480,37 @@ function InstanceList(props: {
         );
       })}
     </>
+  );
+}
+
+/** The instance's mods whose project has no build for its version and loader, opened on demand. */
+function MissingBuilds(props: { instance: InstanceInfo; missing: MissingBuild[]; onOpen: (url: string) => void }) {
+  const { instance, missing, onOpen } = props;
+  const n = missing.length;
+  return (
+    <details className="missing" data-testid="missing-builds">
+      <summary className="detail act">
+        {n} mod{n === 1 ? " has" : "s have"} no {instance.mc_version} {loaderLabel(instance.loader ?? "")} build on
+        Modrinth
+      </summary>
+      <p className="detail">
+        The instance runs an older build or one for another loader. It may work; if the game crashes, these come
+        first.
+      </p>
+      <ul>
+        {missing.map((m) => (
+          <li key={m.file}>
+            {m.slug ? (
+              <button className="link" title={m.file} onClick={() => onOpen(`https://modrinth.com/mod/${m.slug}`)}>
+                {m.title}
+              </button>
+            ) : (
+              <span title={m.file}>{m.title}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

@@ -5,6 +5,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  buildsLookup,
   InstanceInfo,
   SIGN_IN_ANSWER,
   ServerMessage,
@@ -130,6 +131,15 @@ describe("launcher instances", () => {
     const running = started(initialState, "1", "1.21.10", "move");
     const reply = { type: "result", id: "instances", result: { instances: [atm] } } as unknown as ServerMessage;
     expect(reduce(running, reply)).toBe(running); // another id: the run is untouched
+  });
+
+  it("looks up its mods without a build by its folder, version and loader", () => {
+    expect(buildsLookup("builds:/i/atm/minecraft/mods", atm)).toEqual({
+      type: "request",
+      id: "builds:/i/atm/minecraft/mods",
+      method: "builds",
+      params: { mods_dir: "/i/atm/minecraft/mods", mc_version: "1.21.1", loader: "neoforge" },
+    });
   });
 });
 

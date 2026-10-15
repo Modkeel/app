@@ -241,6 +241,35 @@ export function query(id: string, method: "instances" | "github" | "history") {
   return { type: "request", id, method, params: {} };
 }
 
+/** A mod in an instance whose Modrinth project has no build for the instance's version and loader. */
+export interface MissingBuild {
+  file: string;
+  project_id: string;
+  slug: string;
+  title: string;
+}
+
+/** The engine's "builds" lookup: judged by the JARs' hashes; files Modrinth does not know are not judged. */
+export interface BuildsCheck {
+  mods: number;
+  known: number;
+  missing: MissingBuild[];
+  reason: string; // why nothing could be judged (Modrinth down), else ""
+}
+
+/**
+ * A lookup (the engine's LOOKUPS): a query that asks Modrinth, so it answers when done, on its
+ * own thread, beside a run. Routed by its id like a query.
+ */
+export function buildsLookup(id: string, instance: InstanceInfo) {
+  return {
+    type: "request",
+    id,
+    method: "builds",
+    params: { mods_dir: instance.mods_dir, mc_version: instance.mc_version, loader: instance.loader },
+  };
+}
+
 export type ServerMessage =
   | { type: "hello"; protocol: number; modkeel: string; methods: string[] }
   | { type: "event"; id: string; event: EngineEvent }
